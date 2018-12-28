@@ -1,8 +1,8 @@
 package mongo
 
 import (
-	"github.com/eugeis/gee/eh"
-	"github.com/eugeis/gee/eh/app"
+	"github.com/go-ee/utils/eh"
+	"github.com/go-ee/utils/eh/app"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	eventbus "github.com/looplab/eventhorizon/eventbus/local"

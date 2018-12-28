@@ -1,18 +1,19 @@
 package cfg
 
 import (
-	"reflect"
-	"path/filepath"
 	"bytes"
-	"strings"
 	"encoding/json"
-	"fmt"
-	"gopkg.in/yaml.v2"
-	"github.com/BurntSushi/toml"
 	"errors"
-	"time"
+	"fmt"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"text/template"
-	"github.com/eugeis/gee/cfg/props"
+	"time"
+
+	"github.com/BurntSushi/toml"
+	"github.com/go-ee/utils/cfg/props"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func UnmarshalFile(config interface{}, file string) (err error) {

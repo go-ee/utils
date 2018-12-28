@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/eugeis/gee/eh"
-	"github.com/eugeis/gee/lg"
-	"github.com/eugeis/gee/net"
+	"github.com/go-ee/utils/eh"
+	"github.com/go-ee/utils/lg"
+	"github.com/go-ee/utils/net"
 	"github.com/gorilla/mux"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"

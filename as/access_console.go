@@ -2,10 +2,11 @@ package as
 
 import (
 	"bufio"
-	"os"
 	"fmt"
+	"os"
 	"strings"
-	"github.com/eugeis/gee/cfg"
+
+	"github.com/go-ee/utils/cfg"
 	"github.com/howeyc/gopass"
 )
 

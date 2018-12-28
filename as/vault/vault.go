@@ -1,11 +1,12 @@
 package vault
 
 import (
-	vaultapi "github.com/hashicorp/vault/api"
+	"errors"
 	"fmt"
 	"strings"
-	"errors"
-	"github.com/eugeis/gee/as"
+
+	"github.com/go-ee/utils/as"
+	vaultapi "github.com/hashicorp/vault/api"
 )
 
 type VaultClient struct {

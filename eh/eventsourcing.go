@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/eugeis/gee/enum"
-	"github.com/eugeis/gee/net"
+	"github.com/go-ee/utils/enum"
+	"github.com/go-ee/utils/net"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/commandhandler/aggregate"
