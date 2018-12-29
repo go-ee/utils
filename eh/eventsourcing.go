@@ -118,9 +118,11 @@ func (o *AggregateInitializer) RegisterProjector(listener DelegateEventHandler) 
 }
 
 func (o *AggregateInitializer) RegisterForAllEvents(handler eventhorizon.EventHandler) {
-	for _, item := range o.events {
-		o.eventBus.AddHandler(eventhorizon.MatchEvent(eventhorizon.EventType(item.Name())), handler)
+	eventTypes := make([]eventhorizon.EventType, len(o.events))
+	for i, v := range o.events {
+		eventTypes[i] = eventhorizon.EventType(v.Name())
 	}
+	o.eventBus.AddHandler(eventhorizon.MatchAnyEventOf(eventTypes...), handler)
 }
 
 func (o *AggregateInitializer) RegisterForEvent(handler eventhorizon.EventHandler, event enum.Literal) {
