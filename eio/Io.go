@@ -2,6 +2,8 @@ package eio
 
 import (
 	"io"
+	"os"
+	"regexp"
 	"strconv"
 )
 
@@ -23,7 +25,7 @@ func (o *WriteCloserMapWriter) WriteMap(data map[string]interface{}) (err error)
 }
 
 type CollectMapWriter struct {
-	Data [] map[string]interface{}
+	Data []map[string]interface{}
 }
 
 func NewCollectMapWriter() *CollectMapWriter {
@@ -51,4 +53,23 @@ func JoinInt64(ns []int64, sep string) string {
 	}
 	b = b[:len(b)-1]
 	return string(b)
+}
+
+func FileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+func compileFileNameReg() *regexp.Regexp {
+	reg, _ := regexp.Compile("[^a-zA-Z0-9]+")
+	return reg
+}
+
+var fileNameReg *regexp.Regexp = compileFileNameReg()
+
+func ToValidFileName(name string) string {
+	return fileNameReg.ReplaceAllString(name, "_")
 }
