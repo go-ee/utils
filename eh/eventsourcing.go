@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-ee/utils/enum"
 	"github.com/go-ee/utils/net"
+	"github.com/google/uuid"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/commandhandler/aggregate"
@@ -21,7 +22,7 @@ import (
 
 type AggregateInitializer struct {
 	aggregateType    eventhorizon.AggregateType
-	aggregateFactory func(id eventhorizon.UUID) eventhorizon.Aggregate
+	aggregateFactory func(id uuid.UUID) eventhorizon.Aggregate
 	entityFactory    func() eventhorizon.Entity
 	commands         []enum.Literal
 	events           []enum.Literal
@@ -39,7 +40,7 @@ type AggregateInitializer struct {
 }
 
 func NewAggregateInitializer(aggregateType eventhorizon.AggregateType,
-	aggregateFactory func(id eventhorizon.UUID) eventhorizon.Aggregate,
+	aggregateFactory func(id uuid.UUID) eventhorizon.Aggregate,
 	entityFactory func() eventhorizon.Entity,
 	commands []enum.Literal, events []enum.Literal,
 	projectorListener DelegateEventHandler,
@@ -156,7 +157,7 @@ func (o *AggregateBase) ApplyEvent(ctx context.Context, event eventhorizon.Event
 	return o.Apply(event, o.Model)
 }
 
-func NewAggregateBase(aggregateType eventhorizon.AggregateType, id eventhorizon.UUID,
+func NewAggregateBase(aggregateType eventhorizon.AggregateType, id uuid.UUID,
 	commandHandler DelegateCommandHandler, eventHandler DelegateEventHandler,
 	entity eventhorizon.Entity) *AggregateBase {
 	return &AggregateBase{
@@ -175,19 +176,19 @@ func EventHandlerNotImplemented(eventType eventhorizon.EventType) error {
 	return errors.New(fmt.Sprintf("Handler not implemented for %v", eventType))
 }
 
-func EntityAlreadyExists(entityId eventhorizon.UUID, aggregateType eventhorizon.AggregateType) error {
+func EntityAlreadyExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
 	return errors.New(fmt.Sprintf("Entity already exists with id=%v and aggregateType=%v", entityId, aggregateType))
 }
 
-func EntityNotExists(entityId eventhorizon.UUID, aggregateType eventhorizon.AggregateType) error {
+func EntityNotExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
 	return errors.New(fmt.Sprintf("Entity not exists with id=%v and aggregateType=%v", entityId, aggregateType))
 }
 
-func IdNotDefined(currentId eventhorizon.UUID, aggregateType eventhorizon.AggregateType) error {
+func IdNotDefined(currentId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
 	return errors.New(fmt.Sprintf("Id not defined for aggregateType=%v", aggregateType))
 }
 
-func IdsDismatch(entityId eventhorizon.UUID, currentId eventhorizon.UUID, aggregateType eventhorizon.AggregateType) error {
+func IdsDismatch(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
 	return errors.New(fmt.Sprintf("Dismatch entity id and current id, %v != %v, for aggregateType=%v",
 		entityId, currentId, aggregateType))
 }
@@ -196,7 +197,7 @@ func QueryNotImplemented(queryName string) error {
 	return errors.New(fmt.Sprintf("Query not implemented for %v", queryName))
 }
 
-func ValidateNewId(entityId eventhorizon.UUID, currentId eventhorizon.UUID, aggregateType eventhorizon.AggregateType) (ret error) {
+func ValidateNewId(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) (ret error) {
 	if len(entityId) > 0 {
 		ret = EntityAlreadyExists(entityId, aggregateType)
 	} else if len(currentId) == 0 {
@@ -205,7 +206,7 @@ func ValidateNewId(entityId eventhorizon.UUID, currentId eventhorizon.UUID, aggr
 	return
 }
 
-func ValidateIdsMatch(entityId eventhorizon.UUID, currentId eventhorizon.UUID, aggregateType eventhorizon.AggregateType) (ret error) {
+func ValidateIdsMatch(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) (ret error) {
 	if len(entityId) == 0 {
 		ret = EntityNotExists(currentId, aggregateType)
 	} else if entityId != currentId {
@@ -312,7 +313,7 @@ func (o *ReadWriteRepoDelegate) Save(ctx context.Context, entity eventhorizon.En
 	return
 }
 
-func (o *ReadWriteRepoDelegate) Remove(ctx context.Context, id eventhorizon.UUID) (err error) {
+func (o *ReadWriteRepoDelegate) Remove(ctx context.Context, id uuid.UUID) (err error) {
 	var repo eventhorizon.ReadWriteRepo
 	if repo, err = o.delegate(); err == nil {
 		err = repo.Remove(ctx, id)
@@ -327,7 +328,7 @@ func (o *ReadWriteRepoDelegate) Parent() (ret eventhorizon.ReadRepo) {
 	return
 }
 
-func (o *ReadWriteRepoDelegate) Find(ctx context.Context, id eventhorizon.UUID) (ret eventhorizon.Entity, err error) {
+func (o *ReadWriteRepoDelegate) Find(ctx context.Context, id uuid.UUID) (ret eventhorizon.Entity, err error) {
 	var repo eventhorizon.ReadWriteRepo
 	if repo, err = o.delegate(); err == nil {
 		ret, err = repo.Find(ctx, id)
@@ -364,7 +365,7 @@ func (o *EventStoreDelegate) Save(ctx context.Context, events []eventhorizon.Eve
 	return
 }
 
-func (o *EventStoreDelegate) Load(ctx context.Context, aggregateType eventhorizon.AggregateType, id eventhorizon.UUID) (ret []eventhorizon.Event, err error) {
+func (o *EventStoreDelegate) Load(ctx context.Context, aggregateType eventhorizon.AggregateType, id uuid.UUID) (ret []eventhorizon.Event, err error) {
 	var eventStore eventhorizon.EventStore
 	if eventStore, err = o.delegate(); err == nil {
 		ret, err = eventStore.Load(ctx, aggregateType, id)

@@ -66,6 +66,15 @@ func (o *AppBase) StartServer() {
 		http.Handle("/", handler)
 	}
 
+	o.Router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		t, err := route.GetPathTemplate()
+		if err != nil {
+			return err
+		}
+		o.Log.Info(t)
+		return nil
+	})
+
 	o.Log.Info("Server started %v", "127.0.0.1:8080")
 	o.Log.Err("%v", http.ListenAndServe("127.0.0.1:8080", nil))
 }
