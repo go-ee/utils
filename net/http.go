@@ -1,10 +1,14 @@
 package net
 
 import (
-	"net/http"
+	"bytes"
 	"encoding/json"
-	"github.com/gorilla/schema"
+	"fmt"
 	"io"
+	"log"
+	"net/http"
+
+	"github.com/gorilla/schema"
 )
 
 const GET = "GET"
@@ -70,5 +74,30 @@ func Decode(item interface{}, r *http.Request) (err error) {
 	if err == io.EOF {
 		err = nil
 	}
+	return
+}
+
+func PostById(item interface{}, id interface{}, url string, client *http.Client) (err error) {
+
+	var req *http.Request
+	var itemJSON []byte
+
+	if itemJSON, err = json.Marshal(item); err != nil {
+		log.Fatal("Cannot marshal JSON", err)
+		return
+	}
+	requestUrl := fmt.Sprintf("%v/%v", url, id)
+	if req, err = http.NewRequest("POST", requestUrl, bytes.NewBuffer(itemJSON)); err != nil {
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	var resp *http.Response
+	if resp, err = client.Do(req); err != nil {
+		log.Fatal("Cannot send POST request", err)
+		return
+	}
+	log.Println("response", requestUrl, resp.Status)
+	resp.Body.Close()
 	return
 }

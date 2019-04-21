@@ -198,7 +198,7 @@ func QueryNotImplemented(queryName string) error {
 }
 
 func ValidateNewId(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) (ret error) {
-	if len(entityId) > 0 {
+	if entityId != uuid.Nil {
 		ret = EntityAlreadyExists(entityId, aggregateType)
 	} else if len(currentId) == 0 {
 		ret = IdNotDefined(currentId, aggregateType)
