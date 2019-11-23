@@ -2,10 +2,10 @@ package main
 
 import "net/http"
 import (
-	"github.com/urfave/cli"
-	"os"
-	"log"
 	"fmt"
+	"github.com/urfave/cli"
+	"log"
+	"os"
 	"path/filepath"
 )
 
@@ -15,15 +15,15 @@ func main() {
 	app.Usage = "Starts HTTP File Server for given host, port and directory"
 	app.Version = "1.0"
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "address, a",
 			Usage: "Host for the HTTP server",
 			Value: "0.0.0.0",
-		}, cli.IntFlag{
+		}, &cli.IntFlag{
 			Name:  "port, p",
 			Usage: "Port for the HTTP server",
 			Value: 8080,
-		}, cli.StringFlag{
+		}, &cli.StringFlag{
 			Name:  "directory, d",
 			Usage: "Root directory for the HTTP server",
 			Value: ".",
