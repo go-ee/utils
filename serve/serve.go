@@ -16,17 +16,20 @@ func main() {
 	app.Version = "1.0"
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
-			Name:  "address, a",
-			Usage: "Host for the HTTP server",
-			Value: "0.0.0.0",
+			Name:    "address",
+			Aliases: []string{"a"},
+			Usage:   "Host for the HTTP server",
+			Value:   "0.0.0.0",
 		}, &cli.IntFlag{
-			Name:  "port, p",
-			Usage: "Port for the HTTP server",
-			Value: 8080,
+			Name:    "port",
+			Aliases: []string{"p"},
+			Usage:   "Port for the HTTP server",
+			Value:   8080,
 		}, &cli.StringFlag{
-			Name:  "directory, d",
-			Usage: "Root directory for the HTTP server",
-			Value: ".",
+			Name:    "directory",
+			Aliases: []string{"d"},
+			Usage:   "Root directory for the HTTP server",
+			Value:   ".",
 		},
 	}
 	app.Action = func(c *cli.Context) (ret error) {
