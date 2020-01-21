@@ -218,7 +218,7 @@ func ValidateIdsMatch(entityId uuid.UUID, currentId uuid.UUID, aggregateType eve
 type HttpQueryHandler struct {
 }
 
-func NewHttpQueryHandler() (ret *HttpQueryHandler) {
+func NewHttpQueryHandlerFull() (ret *HttpQueryHandler) {
 	ret = &HttpQueryHandler{}
 	return
 }
@@ -242,7 +242,9 @@ type HttpCommandHandler struct {
 	CommandBus eventhorizon.CommandHandler
 }
 
-func NewHttpCommandHandler(context context.Context, commandBus eventhorizon.CommandHandler) (ret *HttpCommandHandler) {
+func NewHttpCommandHandlerFull(
+	context context.Context, commandBus eventhorizon.CommandHandler) (ret *HttpCommandHandler) {
+
 	ret = &HttpCommandHandler{
 		Context:    context,
 		CommandBus: commandBus,
