@@ -129,3 +129,12 @@ func FormatRequest(r *http.Request) string {
 	// Return the request as a string
 	return strings.Join(request, "\n")
 }
+
+func GetQueryOrFormValue(paramName string, r *http.Request) (ret string) {
+	if ret = r.URL.Query().Get(paramName); ret == "" {
+		if r.Method == "POST" {
+			ret = r.FormValue(paramName)
+		}
+	}
+	return
+}
