@@ -138,3 +138,7 @@ func GetQueryOrFormValue(paramName string, r *http.Request) (ret string) {
 	}
 	return
 }
+
+func EnableCors(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+}
