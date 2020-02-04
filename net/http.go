@@ -103,6 +103,13 @@ func PostById(item interface{}, id interface{}, url string, client *http.Client)
 	return
 }
 
+func FormatRequestFrom(r *http.Request) string {
+	var request []string
+	request = append(request, fmt.Sprintf("Host: %v", r.Host))
+	request = append(request, fmt.Sprintf("RemoteAddr: %v", r.RemoteAddr))
+	return strings.Join(request, "\n")
+}
+
 // formatRequest generates ascii representation of a request
 func FormatRequest(r *http.Request) string {
 	// Create return string
