@@ -37,8 +37,8 @@ func main() {
 		if directory, ret = filepath.Abs(c.String("d")); ret != nil {
 			panic(ret)
 		}
-		ip := c.String("a")
-		port := c.Int("p")
+		ip := c.String("address")
+		port := c.Int("port")
 		log.Print(fmt.Sprintf("Start server %v:%v for %v", ip, port, directory))
 		http.Handle("/", http.FileServer(http.Dir(directory)))
 		panic(http.ListenAndServe(fmt.Sprintf("%v:%v", ip, port), nil))
