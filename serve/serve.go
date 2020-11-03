@@ -3,7 +3,7 @@ package main
 import "net/http"
 import (
 	"fmt"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"log"
 	"os"
 	"path/filepath"
