@@ -12,32 +12,33 @@ import (
 )
 
 type Sender struct {
-	User             string
-	Password         string
-	SmtpHost         string
-	SmtpPort         int
+	emailAddress     string
+	smtpLogin        string
+	smtpPassword     string
+	smtpHost         string
+	smtpPort         int
 	smtpHostWithPort string
 }
 
-func NewSender(Username, Password string, smtpHost string, smtpPort int) *Sender {
-	return &Sender{Username, Password, smtpHost, smtpPort,
+func NewSender(emailAddress, smtpLogin, smtpPassword, smtpHost string, smtpPort int) *Sender {
+	return &Sender{emailAddress, smtpLogin, smtpPassword, smtpHost, smtpPort,
 		fmt.Sprintf("%v:%v", smtpHost, smtpPort)}
 }
 
-func (o Sender) Send(Dest []string, Subject, message string) (err error) {
-	msg := fmt.Sprintf("From: %v\nTo: %v\nSubject: %v\n%v",
-		o.User, strings.Join(Dest, ","), Subject, message)
+func (o Sender) Send(dest []string, subject, message string) (err error) {
+	msg := fmt.Sprintf("From: %v\nTo: %v\nsubject: %v\n%v",
+		o.emailAddress, strings.Join(dest, ","), subject, message)
 
-	logrus.Debugf("Send, %v, %v", Dest, Subject)
+	logrus.Debugf("send, %v, %v", dest, subject)
 
 	if err = smtp.SendMail(o.smtpHostWithPort,
-		smtp.PlainAuth("", o.User, o.Password, o.SmtpHost),
-		o.User, Dest, []byte(msg), &tls.Config{
+		smtp.PlainAuth("", o.smtpLogin, o.smtpPassword, o.smtpHost),
+		o.emailAddress, dest, []byte(msg), &tls.Config{
 			InsecureSkipVerify: true,
-			ServerName:         o.SmtpHost,
+			ServerName:         o.smtpHost,
 		}); err != nil {
 
-		logrus.Warnf("Send, err=%v, %v, %v", err, Dest, Subject)
+		logrus.Warnf("Send, err=%v, %v, %v", err, dest, subject)
 	}
 	return
 }
@@ -75,6 +76,6 @@ func (o *Sender) BuildEmailHTML(body string) (ret string, err error) {
 }
 
 func (o *Sender) BuildEmailPlain(body string) (ret string, err error) {
-	ret, err = o.BuildEmail( "text/plain", body)
+	ret, err = o.BuildEmail("text/plain", body)
 	return
 }
