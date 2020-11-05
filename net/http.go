@@ -146,6 +146,13 @@ func GetQueryOrFormValue(paramName string, r *http.Request) (ret string) {
 	return
 }
 
-func EnableCors(w http.ResponseWriter) {
+func CorsAllowAll(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+}
+
+func CorsWrap(allowPattern string, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", allowPattern)
+		h.ServeHTTP(w, r)
+	})
 }
