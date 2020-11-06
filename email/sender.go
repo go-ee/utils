@@ -1,81 +1,59 @@
 package email
 
 import (
-	"bytes"
-	"crypto/tls"
-	"fmt"
-	"github.com/go-ee/utils/net/smtp"
-	"github.com/sirupsen/logrus"
-	"mime/quotedprintable"
-	"strings"
-	"time"
+	"errors"
+	"github.com/go-gomail/gomail"
+	"net/mail"
 )
 
 type Sender struct {
-	emailAddress     string
-	smtpLogin        string
-	smtpPassword     string
-	smtpHost         string
-	smtpPort         int
-	smtpHostWithPort string
+	Server         string
+	Port           int
+	SenderEmail    string
+	SenderIdentity string
+	SMTPUser       string
+	SMTPPassword   string
 }
 
-func NewSender(emailAddress, smtpLogin, smtpPassword, smtpHost string, smtpPort int) *Sender {
-	return &Sender{emailAddress, smtpLogin, smtpPassword, smtpHost, smtpPort,
-		fmt.Sprintf("%v:%v", smtpHost, smtpPort)}
-}
+func (o *Sender) Send(to string, subject string, htmlBody string, txtBody  string) error {
 
-func (o Sender) Send(dest []string, subject, message string) (err error) {
-	msg := fmt.Sprintf("From: %v\nTo: %v\nsubject: %v\n%v",
-		o.emailAddress, strings.Join(dest, ","), subject, message)
-
-	logrus.Debugf("send, %v, %v", dest, subject)
-
-	if err = smtp.SendMail(o.smtpHostWithPort,
-		smtp.PlainAuth("", o.smtpLogin, o.smtpPassword, o.smtpHost),
-		o.emailAddress, dest, []byte(msg), &tls.Config{
-			InsecureSkipVerify: true,
-			ServerName:         o.smtpHost,
-		}); err != nil {
-
-		logrus.Warnf("Send, err=%v, %v, %v", err, dest, subject)
+	if o.Server == "" {
+		return errors.New("SMTP server config is empty")
 	}
-	return
-}
-
-func (o Sender) BuildEmail(contentType, body string) (ret string, err error) {
-
-	header := make(map[string]string)
-
-	header["Date"] = time.Now().Format(time.RFC1123Z)
-	header["MIME-Version"] = "1.0"
-	header["Content-Type"] = fmt.Sprintf("%s; charset=\"utf-8\"", contentType)
-	header["Content-Transfer-Encoding"] = "quoted-printable"
-	header["Content-Disposition"] = "inline"
-
-	for key, value := range header {
-		ret += fmt.Sprintf("%s: %s\r\n", key, value)
+	if o.Port == 0 {
+		return errors.New("SMTP port config is empty")
 	}
 
-	var encodedMessage bytes.Buffer
-
-	finalMessage := quotedprintable.NewWriter(&encodedMessage)
-	if _, err = finalMessage.Write([]byte(body)); err == nil {
-		return
+	if o.SMTPUser == "" {
+		return errors.New("SMTP user is empty")
 	}
-	if err = finalMessage.Close(); err == nil {
-		return
+
+	if o.SenderIdentity == "" {
+		return errors.New("SMTP sender identity is empty")
 	}
-	ret += "\r\n" + encodedMessage.String()
-	return
-}
 
-func (o *Sender) BuildEmailHTML(body string) (ret string, err error) {
-	ret, err = o.BuildEmail("text/html", body)
-	return
-}
+	if o.SenderEmail == "" {
+		return errors.New("SMTP sender email is empty")
+	}
 
-func (o *Sender) BuildEmailPlain(body string) (ret string, err error) {
-	ret, err = o.BuildEmail("text/plain", body)
-	return
+	if to == "" {
+		return errors.New("no receiver emails configured")
+	}
+
+	from := mail.Address{
+		Name:    o.SenderIdentity,
+		Address: o.SenderEmail,
+	}
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", from.String())
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", subject)
+
+	m.SetBody("text/plain", txtBody)
+	m.AddAlternative("text/html", htmlBody)
+
+	d := gomail.NewDialer(o.Server, o.Port, o.SMTPUser, o.SMTPPassword)
+
+	return d.DialAndSend(m)
 }
