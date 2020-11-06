@@ -7,20 +7,51 @@ import (
 )
 
 type Sender struct {
-	Server         string
-	Port           int
 	SenderEmail    string
 	SenderIdentity string
+	SMTPServer     string
+	SMTPPort       int
 	SMTPUser       string
 	SMTPPassword   string
 }
 
-func (o *Sender) Send(to string, subject string, htmlBody string, txtBody  string) error {
+type Message struct {
+	To        string
+	Subject   string
+	HTML      string
+	PlainText string
+}
 
-	if o.Server == "" {
+func (o *Sender) Send(message *Message) (err error) {
+
+	if err = o.validate(message); err != nil {
+		return
+	}
+
+	from := mail.Address{
+		Name:    o.SenderIdentity,
+		Address: o.SenderEmail,
+	}
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", from.String())
+	m.SetHeader("To", message.To)
+	m.SetHeader("Subject", message.Subject)
+
+	m.SetBody("text/plain", message.PlainText)
+	m.AddAlternative("text/html", message.HTML)
+
+	d := gomail.NewDialer(o.SMTPServer, o.SMTPPort, o.SMTPUser, o.SMTPPassword)
+
+	err = d.DialAndSend(m)
+	return
+}
+
+func (o *Sender) validate(message *Message) error {
+	if o.SMTPServer == "" {
 		return errors.New("SMTP server config is empty")
 	}
-	if o.Port == 0 {
+	if o.SMTPPort == 0 {
 		return errors.New("SMTP port config is empty")
 	}
 
@@ -36,24 +67,8 @@ func (o *Sender) Send(to string, subject string, htmlBody string, txtBody  strin
 		return errors.New("SMTP sender email is empty")
 	}
 
-	if to == "" {
+	if message.To == "" {
 		return errors.New("no receiver emails configured")
 	}
-
-	from := mail.Address{
-		Name:    o.SenderIdentity,
-		Address: o.SenderEmail,
-	}
-
-	m := gomail.NewMessage()
-	m.SetHeader("From", from.String())
-	m.SetHeader("To", to)
-	m.SetHeader("Subject", subject)
-
-	m.SetBody("text/plain", txtBody)
-	m.AddAlternative("text/html", htmlBody)
-
-	d := gomail.NewDialer(o.Server, o.Port, o.SMTPUser, o.SMTPPassword)
-
-	return d.DialAndSend(m)
+	return nil
 }
