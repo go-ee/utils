@@ -11,6 +11,7 @@ require (
 	github.com/gorilla/schema v1.2.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c
+	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/looplab/eventhorizon v0.7.3
 	github.com/pkg/errors v0.9.1
 	github.com/rs/cors v1.7.0
