@@ -24,35 +24,35 @@ const QueryTypeFind = "find"
 
 const Command = "command"
 
-func ResponseJson(response interface{}, w http.ResponseWriter) {
-	ResponseJsonCode(response, http.StatusOK, w)
+func ResponseJson(response interface{}, w http.ResponseWriter) error {
+	return ResponseJsonCode(response, http.StatusOK, w)
 }
 
-func ResponseJsonCode(response interface{}, code int, w http.ResponseWriter) {
+func ResponseJsonCode(response interface{}, code int, w http.ResponseWriter) (err error) {
 
-	json, err := json.Marshal(response)
+	jsonData, err := json.Marshal(response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	w.WriteHeader(code)
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(json)
+	_, err = w.Write(jsonData)
+	return
 }
 
 type Result struct {
-	Ok  bool
-	Err error
-	Msg string
+	Ok  bool   `json:"ok,omitempty"`
+	Msg string `json:"msg,omitempty"`
+	Err string `json:"err,omitempty"`
 }
 
-func ResponseResultErr(err error, msg string, code int, w http.ResponseWriter) {
-	ResponseJsonCode(Result{Ok: false, Msg: msg, Err: err}, code, w)
+func ResponseResultErr(err error, msg string, code int, w http.ResponseWriter) error {
+	return ResponseJsonCode(Result{Ok: false, Msg: msg, Err: err.Error()}, code, w)
 }
 
-func ResponseResultOk(msg string, w http.ResponseWriter) {
-	ResponseJson(Result{Ok: true, Msg: msg}, w)
+func ResponseResultOk(msg string, w http.ResponseWriter) error {
+	return ResponseJson(Result{Ok: true, Msg: msg}, w)
 }
 
 func Decode(item interface{}, r *http.Request) (err error) {

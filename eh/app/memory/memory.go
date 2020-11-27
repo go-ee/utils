@@ -5,17 +5,17 @@ import (
 	"github.com/go-ee/utils/eh/app"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
-	eventbus "github.com/looplab/eventhorizon/eventbus/local"
-	eventstore "github.com/looplab/eventhorizon/eventstore/memory"
+	eb "github.com/looplab/eventhorizon/eventbus/local"
+	es "github.com/looplab/eventhorizon/eventstore/memory"
 	repo "github.com/looplab/eventhorizon/repo/memory"
 )
 
-func NewAppMemory(productName string, appName string, secure bool) *app.AppBase {
+func NewAppMemory(productName string, appName string, secure bool, serverAddress string, serverPort int) *app.AppBase {
 	// Create the event store.
-	eventStore := eventstore.NewEventStore()
+	eventStore := es.NewEventStore()
 
 	// Create the event bus that distributes events.
-	eventBus := eventbus.NewEventBus(nil)
+	eventBus := eb.NewEventBus(nil)
 
 	// Create the command bus.
 	commandBus := bus.NewCommandHandler()
@@ -24,7 +24,10 @@ func NewAppMemory(productName string, appName string, secure bool) *app.AppBase 
 	readRepos := func(name string, factory func() eventhorizon.Entity) (ret eventhorizon.ReadWriteRepo) {
 		if item, ok := repos[name]; !ok {
 			ret = &eh.ReadWriteRepoDelegate{Factory: func() (ret eventhorizon.ReadWriteRepo, err error) {
-				return repo.NewRepo(), nil
+				retRepo := repo.NewRepo()
+				retRepo.SetEntityFactory(factory)
+				ret = retRepo
+				return
 			}}
 			repos[name] = ret
 		} else {
@@ -32,5 +35,6 @@ func NewAppMemory(productName string, appName string, secure bool) *app.AppBase 
 		}
 		return
 	}
-	return app.NewAppBase(productName, appName, secure, eventStore, eventBus, commandBus, readRepos)
+	return app.NewAppBase(productName, appName, secure, serverAddress, serverPort,
+		eventStore, eventBus, commandBus, readRepos)
 }

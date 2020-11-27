@@ -3,10 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/go-ee/utils/net/muxlist"
+	"github.com/sirupsen/logrus"
 	"net/http"
 
 	"github.com/go-ee/utils/eh"
-	"github.com/go-ee/utils/lg"
 	"github.com/go-ee/utils/net"
 	"github.com/gorilla/mux"
 	"github.com/looplab/eventhorizon"
@@ -24,18 +25,21 @@ type AppBase struct {
 	SetupCallbacks    []func() error
 	ReadRepos         func(name string, factory func() eventhorizon.Entity) eventhorizon.ReadWriteRepo
 
-	Log    *lg.DebugLogger
+	Log    *logrus.Entry
 	Ctx    context.Context
 	Router *mux.Router
 	Jwt    *net.JwtController
 	Secure bool
 
+	serverAddress string
+	serverPort    int
+
 	notFoundMessage string
 }
 
-func NewAppBase(productName string, appName string, secure bool, eventStore eventhorizon.EventStore, eventBus eventhorizon.EventBus,
-	commandBus *bus.CommandHandler,
-	readRepos func(name string, factory func() eventhorizon.Entity) eventhorizon.ReadWriteRepo) (ret *AppBase) {
+func NewAppBase(productName string, appName string, secure bool, serverAddress string, serverPort int,
+	eventStore eventhorizon.EventStore, eventBus eventhorizon.EventBus, commandBus *bus.CommandHandler,
+	readRepos func(name string, factorySetup func() eventhorizon.Entity) eventhorizon.ReadWriteRepo) (ret *AppBase) {
 	ret = &AppBase{
 		ProductName: productName,
 		Name:        appName,
@@ -45,16 +49,19 @@ func NewAppBase(productName string, appName string, secure bool, eventStore even
 		CommandBus:  commandBus,
 		ReadRepos:   readRepos,
 
-		Log:    lg.NewLogger(appName),
+		Log:    logrus.WithFields(logrus.Fields{"app": appName}),
 		Ctx:    eventhorizon.NewContextWithNamespace(context.Background(), appName),
 		Router: mux.NewRouter().StrictSlash(true),
+
+		serverAddress: serverAddress,
+		serverPort:    serverPort,
 
 		notFoundMessage: fmt.Sprintf("%v: the page is not found", appName),
 	}
 	return
 }
 
-func (o *AppBase) StartServer() {
+func (o *AppBase) StartServer() (err error) {
 	o.Router.NotFoundHandler = http.HandlerFunc(o.NoFound)
 	if o.Secure {
 		o.Router.Path("/logout").Name("Logout").Handler(o.Jwt.LogoutHandler())
@@ -66,17 +73,18 @@ func (o *AppBase) StartServer() {
 		http.Handle("/", handler)
 	}
 
-	o.Router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
-		t, err := route.GetPathTemplate()
-		if err != nil {
-			return err
-		}
-		o.Log.Info(t)
-		return nil
-	})
+	listener := muxlist.NewGorillaMuxLister(o.Router)
 
-	o.Log.Info("Server started %v", "127.0.0.1:8080")
-	o.Log.Err("%v", http.ListenAndServe("127.0.0.1:8080", nil))
+	o.Log.Info(listener.List())
+
+	linkAddress := o.serverAddress
+	if linkAddress == "" {
+		linkAddress = "127.0.0.1"
+	}
+
+	o.Log.Infof("server started, http://%v:%v", linkAddress, o.serverPort)
+	err = http.ListenAndServe(fmt.Sprintf("%v:%v", o.serverAddress, o.serverPort), nil)
+	return
 }
 
 func (o *AppBase) NoFound(w http.ResponseWriter, _ *http.Request) {

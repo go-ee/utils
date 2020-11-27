@@ -88,7 +88,9 @@ func (o *AggregateInitializer) Setup() (err error) {
 
 	if o.setupCallbacks != nil {
 		for _, callback := range o.setupCallbacks {
-			callback()
+			if err = callback(); err != nil {
+				return
+			}
 		}
 	}
 	return
@@ -111,27 +113,29 @@ func (o *AggregateInitializer) registerProjector() (err error) {
 func (o *AggregateInitializer) RegisterProjector(listener DelegateEventHandler) (ret eventhorizon.ReadRepo, err error) {
 	projectorType := string(o.aggregateType)
 	repo := o.readRepos(projectorType, o.entityFactory)
-	projector := projector.NewEventHandler(NewProjector(projectorType, listener), repo)
-	projector.SetEntityFactory(o.entityFactory)
-	o.RegisterForAllEvents(projector)
+	proj := projector.NewEventHandler(NewProjector(projectorType, listener), repo)
+	proj.SetEntityFactory(o.entityFactory)
+	err = o.RegisterForAllEvents(proj)
 	ret = repo
 	return
 }
 
-func (o *AggregateInitializer) RegisterForAllEvents(handler eventhorizon.EventHandler) {
+func (o *AggregateInitializer) RegisterForAllEvents(handler eventhorizon.EventHandler) (err error) {
 	eventTypes := make([]eventhorizon.EventType, len(o.events))
 	for i, v := range o.events {
 		eventTypes[i] = eventhorizon.EventType(v.Name())
 	}
-	o.eventBus.AddHandler(eventhorizon.MatchAnyEventOf(eventTypes...), handler)
+	err = o.eventBus.AddHandler(eventhorizon.MatchAnyEventOf(eventTypes...), handler)
+	return
 }
 
-func (o *AggregateInitializer) RegisterForEvent(handler eventhorizon.EventHandler, event enum.Literal) {
-	o.eventBus.AddHandler(eventhorizon.MatchEvent(eventhorizon.EventType(event.Name())), handler)
+func (o *AggregateInitializer) RegisterForEvent(handler eventhorizon.EventHandler, event enum.Literal) (err error) {
+	err = o.eventBus.AddHandler(eventhorizon.MatchEvent(eventhorizon.EventType(event.Name())), handler)
+	return
 }
 
 type AggregateStoreEvent interface {
-	StoreEvent(eventhorizon.EventType, eventhorizon.EventData, time.Time) eventhorizon.Event
+	AppendEvent(eventhorizon.EventType, eventhorizon.EventData, time.Time) eventhorizon.Event
 }
 
 type DelegateCommandHandler interface {
@@ -142,19 +146,24 @@ type DelegateEventHandler interface {
 	Apply(event eventhorizon.Event, entity eventhorizon.Entity) error
 }
 
+type Entity interface {
+	EntityID() uuid.UUID
+	Deleted() *time.Time
+}
+
 type AggregateBase struct {
 	*events.AggregateBase
 	DelegateCommandHandler
 	DelegateEventHandler
-	Model eventhorizon.Entity
+	Entity eventhorizon.Entity
 }
 
 func (o *AggregateBase) HandleCommand(ctx context.Context, cmd eventhorizon.Command) error {
-	return o.Execute(cmd, o.Model, o.AggregateBase)
+	return o.Execute(cmd, o.Entity, o.AggregateBase)
 }
 
 func (o *AggregateBase) ApplyEvent(ctx context.Context, event eventhorizon.Event) error {
-	return o.Apply(event, o.Model)
+	return o.Apply(event, o.Entity)
 }
 
 func NewAggregateBase(aggregateType eventhorizon.AggregateType, id uuid.UUID,
@@ -164,28 +173,28 @@ func NewAggregateBase(aggregateType eventhorizon.AggregateType, id uuid.UUID,
 		AggregateBase:          events.NewAggregateBase(aggregateType, id),
 		DelegateCommandHandler: commandHandler,
 		DelegateEventHandler:   eventHandler,
-		Model:                  entity,
+		Entity:                 entity,
 	}
 }
 
 func CommandHandlerNotImplemented(commandType eventhorizon.CommandType) error {
-	return errors.New(fmt.Sprintf("Handler not implemented for %v", commandType))
+	return errors.New(fmt.Sprintf("handler not implemented for %v", commandType))
 }
 
 func EventHandlerNotImplemented(eventType eventhorizon.EventType) error {
-	return errors.New(fmt.Sprintf("Handler not implemented for %v", eventType))
+	return errors.New(fmt.Sprintf("handler not implemented for %v", eventType))
 }
 
 func EntityAlreadyExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
-	return errors.New(fmt.Sprintf("Entity already exists with id=%v and aggregateType=%v", entityId, aggregateType))
+	return errors.New(fmt.Sprintf("entity already exists with id=%v and aggregateType=%v", entityId, aggregateType))
 }
 
 func EntityNotExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
-	return errors.New(fmt.Sprintf("Entity not exists with id=%v and aggregateType=%v", entityId, aggregateType))
+	return errors.New(fmt.Sprintf("entity not exists with id=%v and aggregateType=%v", entityId, aggregateType))
 }
 
 func IdNotDefined(currentId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
-	return errors.New(fmt.Sprintf("Id not defined for aggregateType=%v", aggregateType))
+	return errors.New(fmt.Sprintf("id not defined for aggregateType=%v", aggregateType))
 }
 
 func IdsDismatch(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
@@ -200,14 +209,14 @@ func QueryNotImplemented(queryName string) error {
 func ValidateNewId(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) (ret error) {
 	if entityId != uuid.Nil {
 		ret = EntityAlreadyExists(entityId, aggregateType)
-	} else if len(currentId) == 0 {
+	} else if currentId == uuid.Nil {
 		ret = IdNotDefined(currentId, aggregateType)
 	}
 	return
 }
 
 func ValidateIdsMatch(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) (ret error) {
-	if len(entityId) == 0 {
+	if entityId == uuid.Nil {
 		ret = EntityNotExists(currentId, aggregateType)
 	} else if entityId != currentId {
 		ret = IdsDismatch(entityId, currentId, aggregateType)
@@ -223,12 +232,14 @@ func NewHttpQueryHandlerFull() (ret *HttpQueryHandler) {
 	return
 }
 
-func (o *HttpQueryHandler) HandleResult(ret interface{}, err error, method string, w http.ResponseWriter, r *http.Request) {
+func (o *HttpQueryHandler) HandleResult(
+	ret interface{}, err error, method string, w http.ResponseWriter, r *http.Request) {
+
 	if err == nil {
-		var js []byte
-		if js, err = json.Marshal(ret); err == nil {
+		var jsonData []byte
+		if jsonData, err = json.Marshal(ret); err == nil {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(js)
+			w.Write(jsonData)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -263,10 +274,10 @@ func (o *HttpCommandHandler) HandleCommand(command eventhorizon.Command, w http.
 	}
 
 	if err = o.CommandBus.HandleCommand(o.Context, command); err != nil {
-		net.ResponseResultErr(err, fmt.Sprintf("Can't execute command %T %v", command, command),
+		net.ResponseResultErr(err, fmt.Sprintf("failed, command %T, %v", command, command),
 			http.StatusExpectationFailed, w)
 	} else {
-		net.ResponseResultOk(fmt.Sprintf("Succefully executed command %T %v from %v", command, command,
+		net.ResponseResultOk(fmt.Sprintf("succefully, command %T, %v, %v", command, command,
 			html.EscapeString(r.URL.Path)), w)
 	}
 }
@@ -288,7 +299,9 @@ func (o *ProjectorEventHandler) ProjectorType() projector.Type {
 	return o.projectorType
 }
 
-func (o *ProjectorEventHandler) Project(ctx context.Context, event eventhorizon.Event, entity eventhorizon.Entity) (ret eventhorizon.Entity, err error) {
+func (o *ProjectorEventHandler) Project(
+	ctx context.Context, event eventhorizon.Event, entity eventhorizon.Entity) (ret eventhorizon.Entity, err error) {
+
 	ret = entity
 	err = o.Apply(event, entity)
 	return
@@ -341,9 +354,28 @@ func (o *ReadWriteRepoDelegate) Find(ctx context.Context, id uuid.UUID) (ret eve
 func (o *ReadWriteRepoDelegate) FindAll(ctx context.Context) (ret []eventhorizon.Entity, err error) {
 	var repo eventhorizon.ReadWriteRepo
 	if repo, err = o.delegate(); err == nil {
-		ret, err = repo.FindAll(ctx)
+		if ret, err = repo.FindAll(ctx); err == nil {
+			ret = o.FilterDeleted(ret)
+		}
 	}
 	return
+}
+
+func (o *ReadWriteRepoDelegate) FilterDeleted(ret []eventhorizon.Entity) []eventhorizon.Entity {
+	n := 0
+	for _, x := range ret {
+		if e, ok := x.(Entity); ok {
+			if e.Deleted() == nil {
+				ret[n] = x
+				n++
+			}
+		} else {
+			ret[n] = x
+			n++
+		}
+	}
+	ret = ret[:n]
+	return ret
 }
 
 type EventStoreDelegate struct {
@@ -367,10 +399,10 @@ func (o *EventStoreDelegate) Save(ctx context.Context, events []eventhorizon.Eve
 	return
 }
 
-func (o *EventStoreDelegate) Load(ctx context.Context, aggregateType eventhorizon.AggregateType, id uuid.UUID) (ret []eventhorizon.Event, err error) {
+func (o *EventStoreDelegate) Load(ctx context.Context, id uuid.UUID) (ret []eventhorizon.Event, err error) {
 	var eventStore eventhorizon.EventStore
 	if eventStore, err = o.delegate(); err == nil {
-		ret, err = eventStore.Load(ctx, aggregateType, id)
+		ret, err = eventStore.Load(ctx, id)
 	}
 	return
 }

@@ -5,19 +5,20 @@ import (
 	"github.com/go-ee/utils/eh/app"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
-	eventbus "github.com/looplab/eventhorizon/eventbus/local"
-	eventstore "github.com/looplab/eventhorizon/eventstore/mongodb"
+	eb "github.com/looplab/eventhorizon/eventbus/local"
+	es "github.com/looplab/eventhorizon/eventstore/mongodb"
 	repo "github.com/looplab/eventhorizon/repo/mongodb"
 )
 
-func NewAppMongo(productName string, appName string, secure bool, mongoUrl string) *app.AppBase {
+func NewAppMongo(productName string, appName string, secure bool, serverAddress string, serverPort int,
+	mongoUrl string) *app.AppBase {
 	// Create the event store.
 	eventStore := &eh.EventStoreDelegate{Factory: func() (ret eventhorizon.EventStore, err error) {
-		return eventstore.NewEventStore("localhost", productName)
+		return es.NewEventStore("localhost", productName)
 	}}
 
 	// Create the event bus that distributes events.
-	eventBus := eventbus.NewEventBus(nil)
+	eventBus := eb.NewEventBus(nil)
 
 	// Create the command bus.
 	commandBus := bus.NewCommandHandler()
@@ -39,5 +40,6 @@ func NewAppMongo(productName string, appName string, secure bool, mongoUrl strin
 		}
 		return
 	}
-	return app.NewAppBase(productName, appName, secure, eventStore, eventBus, commandBus, readRepos)
+	return app.NewAppBase(productName, appName, secure, serverAddress, serverPort,
+		eventStore, eventBus, commandBus, readRepos)
 }
