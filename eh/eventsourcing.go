@@ -21,6 +21,8 @@ import (
 )
 
 type AggregateInitializer struct {
+	ctx              context.Context
+	cancel           context.CancelFunc
 	aggregateType    eventhorizon.AggregateType
 	aggregateFactory func(id uuid.UUID) eventhorizon.Aggregate
 	entityFactory    func() eventhorizon.Entity
@@ -46,7 +48,10 @@ func NewAggregateInitializer(aggregateType eventhorizon.AggregateType,
 	projectorListener DelegateEventHandler,
 	setupCallbacks []func() error, eventStore eventhorizon.EventStore, eventBus eventhorizon.EventBus, commandBus *bus.CommandHandler,
 	readRepos func(name string, factory func() eventhorizon.Entity) eventhorizon.ReadWriteRepo) (ret *AggregateInitializer) {
+	ctx, cancel := context.WithCancel(context.Background())
 	ret = &AggregateInitializer{
+		ctx:               ctx,
+		cancel:            cancel,
 		aggregateType:     aggregateType,
 		aggregateFactory:  aggregateFactory,
 		entityFactory:     entityFactory,
@@ -125,12 +130,12 @@ func (o *AggregateInitializer) RegisterForAllEvents(handler eventhorizon.EventHa
 	for i, v := range o.events {
 		eventTypes[i] = eventhorizon.EventType(v.Name())
 	}
-	err = o.eventBus.AddHandler(eventhorizon.MatchAnyEventOf(eventTypes...), handler)
+	err = o.eventBus.AddHandler(o.ctx, eventhorizon.MatchEvents(eventTypes), handler)
 	return
 }
 
 func (o *AggregateInitializer) RegisterForEvent(handler eventhorizon.EventHandler, event enum.Literal) (err error) {
-	err = o.eventBus.AddHandler(eventhorizon.MatchEvent(eventhorizon.EventType(event.Name())), handler)
+	err = o.eventBus.AddHandler(o.ctx, eventhorizon.MatchEvents([]eventhorizon.EventType{eventhorizon.EventType(event.Name())}), handler)
 	return
 }
 
