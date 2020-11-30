@@ -5,17 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gorilla/schema"
 )
-
-const GET = "GET"
-const POST = "POST"
-const PUT = "PUT"
-const DELETE = "DELETE"
 
 const QueryType = "qType"
 const QueryTypeCount = "count"
@@ -84,22 +80,62 @@ func PostById(item interface{}, id interface{}, url string, client *http.Client)
 	var itemJSON []byte
 
 	if itemJSON, err = json.Marshal(item); err != nil {
-		log.Fatal("Cannot marshal JSON", err)
+		log.Fatal("cannot marshal JSON", err)
 		return
 	}
 	requestUrl := fmt.Sprintf("%v/%v", url, id)
-	if req, err = http.NewRequest("POST", requestUrl, bytes.NewBuffer(itemJSON)); err != nil {
+	if req, err = http.NewRequest(http.MethodPost, requestUrl, bytes.NewBuffer(itemJSON)); err != nil {
 		return
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	var resp *http.Response
 	if resp, err = client.Do(req); err != nil {
-		log.Fatal("Cannot send POST request", err)
+		log.Fatal("cannot send POST request", err)
 		return
 	}
 	log.Println("response", requestUrl, resp.Status)
 	resp.Body.Close()
+	return
+}
+
+func DeleteById(id interface{}, url string, client *http.Client) (err error) {
+	var req *http.Request
+
+	requestUrl := fmt.Sprintf("%v/%v", url, id)
+	if req, err = http.NewRequest(http.MethodDelete, requestUrl, nil); err != nil {
+		return
+	}
+
+	var resp *http.Response
+	if resp, err = client.Do(req); err != nil {
+		log.Fatal("cannot send DELETE request", err)
+		return
+	}
+	log.Println("response", requestUrl, resp.Status)
+	resp.Body.Close()
+	return
+}
+
+func GetItems(items interface{}, url string, client *http.Client) (err error) {
+
+	var req *http.Request
+
+	if req, err = http.NewRequest(http.MethodGet, url, nil); err != nil {
+		return
+	}
+
+	var resp *http.Response
+	if resp, err = client.Do(req); err != nil {
+		log.Fatal("cannot send GET request", err)
+		return
+	}
+
+	defer resp.Body.Close()
+	bodyBytes, _ := ioutil.ReadAll(resp.Body)
+
+	err = json.Unmarshal(bodyBytes, &items)
+
 	return
 }
 

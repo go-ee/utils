@@ -25,11 +25,11 @@ type AppBase struct {
 	SetupCallbacks    []func() error
 	ReadRepos         func(name string, factory func() eventhorizon.Entity) eventhorizon.ReadWriteRepo
 
-	Log    *logrus.Entry
-	Ctx    context.Context
-	Router *mux.Router
-	Jwt    *net.JwtController
-	Secure bool
+	Log        *logrus.Entry
+	NewContext func(namespace string) context.Context
+	Router     *mux.Router
+	Jwt        *net.JwtController
+	Secure     bool
 
 	serverAddress string
 	serverPort    int
@@ -49,8 +49,10 @@ func NewAppBase(productName string, appName string, secure bool, serverAddress s
 		CommandBus:  commandBus,
 		ReadRepos:   readRepos,
 
-		Log:    logrus.WithFields(logrus.Fields{"app": appName}),
-		Ctx:    eventhorizon.NewContextWithNamespace(context.Background(), appName),
+		Log: logrus.WithFields(logrus.Fields{"app": appName}),
+		NewContext: func(structure string) context.Context {
+			return eventhorizon.NewContextWithNamespace(context.Background(), appName+"/"+structure)
+		},
 		Router: mux.NewRouter().StrictSlash(true),
 
 		serverAddress: serverAddress,
