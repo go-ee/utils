@@ -360,19 +360,21 @@ func (o *ReadWriteRepoDelegate) FindAll(ctx context.Context) (ret []eventhorizon
 	var repo eventhorizon.ReadWriteRepo
 	if repo, err = o.delegate(); err == nil {
 		if ret, err = repo.FindAll(ctx); err == nil {
-			ret = o.FilterDeleted(ret)
+			ret = o.FilterDeleted(ctx, ret)
 		}
 	}
 	return
 }
 
-func (o *ReadWriteRepoDelegate) FilterDeleted(ret []eventhorizon.Entity) []eventhorizon.Entity {
+func (o *ReadWriteRepoDelegate) FilterDeleted(ctx context.Context, ret []eventhorizon.Entity) []eventhorizon.Entity {
 	n := 0
 	for _, x := range ret {
 		if e, ok := x.(Entity); ok {
 			if e.Deleted() == nil {
 				ret[n] = x
 				n++
+			} else {
+				o.repo.Remove(ctx, e.EntityID())
 			}
 		} else {
 			ret[n] = x
