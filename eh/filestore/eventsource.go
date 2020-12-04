@@ -6,31 +6,25 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"github.com/go-ee/utils/eio"
+	"github.com/google/uuid"
+	eh "github.com/looplab/eventhorizon"
+	"io"
 	os "os"
 	"path/filepath"
 	"time"
-
-	"github.com/google/uuid"
-	eh "github.com/looplab/eventhorizon"
 )
 
-// ErrCouldNotClearDB is when the database could not be cleared.
 var ErrCouldNotClearDB = errors.New("could not clear database")
 
-// ErrCouldNotMarshalEvent is when an event could not be marshaled into BSON.
-var ErrCouldNotMarshalEvent = errors.New("could not marshal event")
+var ErrCouldNotMarshalEvent = errors.New("could not marshal dbEvent")
 
-// ErrCouldNotUnmarshalEvent is when an event could not be unmarshaled into a concrete type.
-var ErrCouldNotUnmarshalEvent = errors.New("could not unmarshal event")
+var ErrCouldNotUnmarshalEvent = errors.New("could not unmarshal dbEvent")
 
-// ErrCouldNotLoadAggregate is when an aggregate could not be loaded.
 var ErrCouldNotLoadAggregate = errors.New("could not load aggregate")
 
-// ErrCouldNotSaveAggregate is when an aggregate could not be saved.
 var ErrCouldNotSaveAggregate = errors.New("could not save aggregate")
 
-// EventStore implements an EventStore for MongoDB.
 type EventStore struct {
 	folder            string
 	defaultFolderPerm os.FileMode
@@ -46,7 +40,7 @@ func NewEventStore(folder string) *EventStore {
 }
 
 // Save implements the Save method of the eventhorizon.EventStore interface.
-func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersion int) error {
+func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersion int) (err error) {
 	if len(events) == 0 {
 		return eh.EventStoreError{
 			Err:       eh.ErrNoEventsToAppend,
@@ -54,12 +48,30 @@ func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersio
 		}
 	}
 
-	// Build all event records, with incrementing versions starting from the
-	// original aggregate version.
-	dbEvents := make([]dbEvent, len(events))
+	namespaceFolder := s.buildFolderName(ctx)
+	if err = os.MkdirAll(namespaceFolder, s.defaultFolderPerm); err != nil {
+		return errCouldNotSaveAggregate(ctx, err)
+	}
+
 	firstEvent := events[0]
 	aggregateId := firstEvent.AggregateID()
-	aggregateType := firstEvent.AggregateType()
+
+	aggregateEventsFileName := buildEventsFileName(namespaceFolder, aggregateId)
+	if err = checkAggregateVersion(ctx, aggregateEventsFileName, originalVersion); err != nil {
+		return
+	}
+
+	var aggregateEventsFile *os.File
+	if aggregateEventsFile, err =
+		os.OpenFile(aggregateEventsFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, s.defaultFilePerm); err != nil {
+		return errCouldNotSaveAggregate(ctx, err)
+	}
+	defer aggregateEventsFile.Close()
+
+	// Build all dbEvent records, with incrementing versions starting from the
+	// original aggregate version.
+	dbEvents := make([]dbEvent, len(events))
+
 	for i, event := range events {
 		// Only accept events belonging to the same aggregate.
 		if event.AggregateID() != aggregateId {
@@ -71,233 +83,86 @@ func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersio
 
 		// Only accept events that apply to the correct aggregate version.
 		if event.Version() != originalVersion+i+1 {
-			return eh.EventStoreError{
-				Err:       eh.ErrIncorrectEventVersion,
-				Namespace: eh.NamespaceFromContext(ctx),
-			}
+			return errIncorrectEventVersion(ctx)
 		}
 
-		// Create the event record for the DB.
-		e, err := newDBEvent(ctx, event)
+		// Create the dbEvent record for the DB.
+		e, err := newDbEvent(event)
 		if err != nil {
 			return err
 		}
 		dbEvents[i] = *e
 	}
 
-	namespaceFolder := s.buildFolderName(ctx)
-	if err := os.MkdirAll(namespaceFolder, s.defaultFolderPerm); err != nil {
-		return eh.EventStoreError{
-			Err:       ErrCouldNotSaveAggregate,
-			BaseErr:   err,
-			Namespace: eh.NamespaceFromContext(ctx),
-		}
-	}
+	aggregateEventsWriter := bufio.NewWriter(aggregateEventsFile)
 
-	// Either insert a new aggregate or append to an existing.
-	if originalVersion == 0 {
-		if err := s.saveAggregate(ctx, namespaceFolder, &aggregateRecord{
-			Id:      aggregateId,
-			Version: len(dbEvents),
-			Type:    aggregateType,
-		}); err != nil {
+	for _, dbEvent := range dbEvents {
+		if err := writeEvent(ctx, dbEvent, aggregateEventsWriter); err != nil {
 			return err
 		}
-
-		if err := s.writeEvents(ctx, namespaceFolder, aggregateId, dbEvents); err != nil {
-			return err
-		}
-	} else {
-		// Increment aggregate version on insert of new event record, and
-		// only insert if version of aggregate is matching (ie not changed
-		// since loading the aggregate).
-		if aggregate, err := s.loadAggregate(ctx, namespaceFolder, aggregateId); err != nil {
-			return err
-		} else {
-			if aggregate.Version != originalVersion {
-				return eh.EventStoreError{
-					Err:       ErrCouldNotSaveAggregate,
-					BaseErr:   fmt.Errorf("invalid original version %d", originalVersion),
-					Namespace: eh.NamespaceFromContext(ctx),
-				}
-			} else {
-				aggregate.Version += len(dbEvents)
-				if err := s.saveAggregate(ctx, namespaceFolder, aggregate); err != nil {
-					return err
-				}
-
-				if err := s.writeEvents(ctx, namespaceFolder, aggregateId, dbEvents); err != nil {
-					return err
-				}
-			}
-		}
 	}
+	aggregateEventsWriter.Flush()
+	aggregateEventsFile.Close()
 
-	return nil
+	return
 }
 
-func (s *EventStore) writeEvents(
-	ctx context.Context, namespaceFolder string, aggregateId uuid.UUID, dbEvents []dbEvent) error {
-
-	aggregateEventsFileName := s.buildAggregateEventsFileName(namespaceFolder, aggregateId)
-	if aggregateEventsFile, err :=
-		os.OpenFile(aggregateEventsFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, s.defaultFilePerm); err != nil {
-		return s.newCouldNotSaveAggregate(ctx, err)
-	} else {
-		aggregateEventsWriter := bufio.NewWriter(aggregateEventsFile)
-
-		for _, dbEvent := range dbEvents {
-			if err := s.writeEvent(ctx, dbEvent, aggregateEventsWriter); err != nil {
-				return err
-			}
-		}
-		aggregateEventsWriter.Flush()
-		aggregateEventsFile.Close()
-	}
-	return nil
-}
-
-func (s *EventStore) writeEvent(ctx context.Context, dbEvent dbEvent, aggregateEventsWriter *bufio.Writer) error {
-	if bytes, err := json.Marshal(dbEvent); err == nil {
-		if _, err = aggregateEventsWriter.Write(bytes); err != nil {
-			return s.newCouldNotSaveAggregate(ctx, err)
-		} else {
-			if _, err = aggregateEventsWriter.WriteString("\n"); err != nil {
-				return s.newCouldNotSaveAggregate(ctx, err)
-			}
-		}
-	} else {
-		return s.newCouldNotSaveAggregate(ctx, err)
-	}
-	return nil
-}
-
-func (s *EventStore) newCouldNotSaveAggregate(ctx context.Context, baseErr error) error {
-	return eh.EventStoreError{
-		Err:       ErrCouldNotSaveAggregate,
-		BaseErr:   baseErr,
-		Namespace: eh.NamespaceFromContext(ctx),
-	}
-}
-
-// Load implements the Load method of the eventhorizon.EventStore interface.
 func (s *EventStore) Load(ctx context.Context, id uuid.UUID) (ret []eh.Event, err error) {
 	namespaceFolder := s.buildFolderName(ctx)
 
-	var aggregate *aggregateRecord
-	if aggregate, err = s.loadAggregate(ctx, namespaceFolder, id); err != nil {
-		return
-	}
-
-	if aggregate == nil {
-		return []eh.Event{}, nil
-	}
-
-	eventsFileName := s.buildAggregateEventsFileName(namespaceFolder, id)
+	eventsFileName := buildEventsFileName(namespaceFolder, id)
 	var eventsFile *os.File
 	if eventsFile, err = os.Open(eventsFileName); err != nil {
 		if os.IsNotExist(err) {
 			return []eh.Event{}, nil
 		} else {
-			return nil, eh.EventStoreError{
-				Err:       ErrCouldNotLoadAggregate,
-				BaseErr:   err,
-				Namespace: eh.NamespaceFromContext(ctx),
-			}
+			return nil, errCouldNotLoadAggregate(ctx, err)
 		}
 	}
 	defer eventsFile.Close()
 
-	events := make([]eh.Event, aggregate.Version)
 	eventIndex := 0
-	scanner := bufio.NewScanner(eventsFile)
+	scanner, err := eio.NewReverseScannerFile(eventsFile)
+	if err != nil {
+		return nil, errCouldNotLoadAggregate(ctx, err)
+	}
+	// read last line
+	if !scanner.Scan() {
+		if scanner.ScanErr() == io.EOF {
+			return s.noEvents()
+		}
+		return nil, errCouldNotLoadAggregate(ctx, err)
+	}
+
+	var lastEvent *dbEvent
+	if lastEvent, err = parseEvent(ctx, scanner.Bytes()); err != nil {
+		return
+	}
+	var events = make([]eh.Event, lastEvent.Version())
+	eventIndex = lastEvent.Version() - 1
+	events[eventIndex] = lastEvent
+
 	for scanner.Scan() {
-		dbEventType := dbEventType{}
-		if err = json.Unmarshal(scanner.Bytes(), &dbEventType); err != nil {
-			return s.errCouldNotUnmarshalEvent(ctx, err)
+		eventIndex -= 1
+		if events[eventIndex], err = parseEvent(ctx, scanner.Bytes()); err != nil {
+			return
 		}
-		var eventData eh.EventData
-		if eventData, err = eh.CreateEventData(dbEventType.EventType); err != nil {
-			return s.errCouldNotUnmarshalEvent(ctx, err)
-		}
-
-		dbEvent := dbEvent{
-			Data: eventData,
-		}
-		if err = json.Unmarshal(scanner.Bytes(), &dbEvent); err == nil {
-			events[eventIndex] = event{
-				aggregate: aggregate,
-				dbEvent:   dbEvent,
-			}
-			eventIndex += 1
-		} else {
-			return nil, eh.EventStoreError{
-				Err:       ErrCouldNotUnmarshalEvent,
-				BaseErr:   err,
-				Namespace: eh.NamespaceFromContext(ctx),
-			}
-		}
-
 	}
 	return events, nil
 }
 
-func (s *EventStore) errCouldNotUnmarshalEvent(ctx context.Context, err error) ([]eh.Event, error) {
-	return nil, eh.EventStoreError{
-		Err:       ErrCouldNotUnmarshalEvent,
-		BaseErr:   err,
-		Namespace: eh.NamespaceFromContext(ctx),
-	}
+func (s *EventStore) noEvents() ([]eh.Event, error) {
+	return []eh.Event{}, nil
 }
 
-func (s *EventStore) loadAggregate(
-	ctx context.Context, namespaceFolder string, id uuid.UUID) (ret *aggregateRecord, err error) {
-
-	aggregateFileName := s.buildAggregateFileName(namespaceFolder, id)
-
-	if data, err := ioutil.ReadFile(aggregateFileName); err == nil {
-		ret = &aggregateRecord{}
-		if err = json.Unmarshal(data, ret); err != nil {
-			err = eh.EventStoreError{
-				Err:       ErrCouldNotLoadAggregate,
-				BaseErr:   err,
-				Namespace: eh.NamespaceFromContext(ctx),
-			}
-		}
-	}
-	return
-}
-
-func (s *EventStore) saveAggregate(
-	ctx context.Context, namespaceFolder string, aggregate *aggregateRecord) (err error) {
-
-	var data []byte
-	if data, err = json.MarshalIndent(aggregate, "", " "); err == nil {
-		aggregateFileName := s.buildAggregateFileName(namespaceFolder, aggregate.Id)
-		err = ioutil.WriteFile(aggregateFileName, data, s.defaultFilePerm)
-	}
-
-	if err != nil {
-		err = eh.EventStoreError{
-			Err:       ErrCouldNotSaveAggregate,
-			BaseErr:   err,
-			Namespace: eh.NamespaceFromContext(ctx),
-		}
-	}
-	return
-}
-
-// Replace implements the Replace method of the eventhorizon.EventStore interface.
 func (s *EventStore) Replace(ctx context.Context, event eh.Event) error {
 	return nil
 }
 
-// RenameEvent implements the RenameEvent method of the eventhorizon.EventStore interface.
 func (s *EventStore) RenameEvent(ctx context.Context, from, to eh.EventType) error {
 	return nil
 }
 
-// Clear clears the event storage.
 func (s *EventStore) Clear(ctx context.Context) error {
 	if err := os.RemoveAll(s.buildFolderName(ctx)); err != nil {
 		return eh.EventStoreError{
@@ -309,7 +174,6 @@ func (s *EventStore) Clear(ctx context.Context) error {
 	return nil
 }
 
-// Close closes the database client.
 func (s *EventStore) Close(ctx context.Context) {
 }
 
@@ -317,22 +181,141 @@ func (s *EventStore) buildFolderName(ctx context.Context) string {
 	return filepath.Join(s.folder, eh.NamespaceFromContext(ctx))
 }
 
-func (s *EventStore) buildAggregateFileName(folder string, aggregateId uuid.UUID) string {
+func buildEventsFileName(folder string, aggregateId uuid.UUID) string {
 	return filepath.Join(folder, aggregateId.String()) + ".json"
 }
 
-func (s *EventStore) buildAggregateEventsFileName(folder string, aggregateId uuid.UUID) string {
-	return filepath.Join(folder, aggregateId.String()) + "_events.json"
+func scanLastEvent(ctx context.Context, scanner *eio.ReverseScanner) (ret *dbEvent, err error) {
+	if !scanner.Scan() {
+		if scanner.ScanErr() != io.EOF {
+			err = errCouldNotLoadAggregate(ctx, scanner.ScanErr())
+		}
+	} else {
+		ret, err = parseEvent(ctx, scanner.Bytes())
+	}
+	return
 }
 
-// aggregateRecord is the Database representation of an aggregate.
-type aggregateRecord struct {
-	Id      uuid.UUID        `json:"id"`
-	Version int              `json:"version"`
-	Type    eh.AggregateType `json:"type"`
+func checkAggregateVersion(
+	ctx context.Context, eventsFileName string, originalVersion int) (err error) {
+
+	var lastEvent *dbEvent
+	if lastEvent, err = loadLastEvent(ctx, eventsFileName); err != nil {
+		return errCouldNotLoadAggregate(ctx, err)
+	}
+	var aggregateVersion int
+	if lastEvent == nil {
+		aggregateVersion = 0
+	} else {
+		aggregateVersion = lastEvent.Version()
+	}
+
+	// Increment aggregate version on insert of new dbEvent record, and
+	// only insert if version of aggregate is matching (ie not changed
+	// since loading the aggregate).
+	if aggregateVersion != originalVersion {
+		err = eh.EventStoreError{
+			Err:       ErrCouldNotSaveAggregate,
+			BaseErr:   fmt.Errorf("invalid original version %d", originalVersion),
+			Namespace: eh.NamespaceFromContext(ctx),
+		}
+	}
+	return
 }
 
-// dbEvent is the internal event record for the MongoDB event store used
+func loadLastEvent(ctx context.Context, eventsFileName string) (ret *dbEvent, err error) {
+	var aggregateEventsFile *os.File
+	if aggregateEventsFile, err = os.Open(eventsFileName); err != nil {
+		return nil, nil
+	}
+	defer aggregateEventsFile.Close()
+
+	var scanner *eio.ReverseScanner
+	if scanner, err = eio.NewReverseScannerFile(aggregateEventsFile); err != nil {
+		err = errCouldNotLoadAggregate(ctx, err)
+		return
+	}
+
+	ret, err = scanLastEvent(ctx, scanner)
+	return
+}
+
+func writeEvent(ctx context.Context, dbEvent dbEvent, aggregateEventsWriter *bufio.Writer) error {
+	if bytes, err := json.Marshal(dbEvent); err == nil {
+		if _, err = aggregateEventsWriter.Write(bytes); err != nil {
+			return errCouldNotSaveAggregate(ctx, err)
+		} else {
+			if _, err = aggregateEventsWriter.WriteString("\n"); err != nil {
+				return errCouldNotSaveAggregate(ctx, err)
+			}
+		}
+	} else {
+		return errCouldNotMarshalEvent(ctx, err)
+	}
+	return nil
+}
+
+func parseEvent(ctx context.Context, data []byte) (ret *dbEvent, err error) {
+	dbEventType := dbEventType{}
+	if err = json.Unmarshal(data, &dbEventType); err != nil {
+		err = errCouldNotUnmarshalEvent(ctx, err)
+		return
+	}
+
+	dbEvent := dbEvent{}
+
+	if eventData, eventDataErr := eh.CreateEventData(dbEventType.EventType); eventDataErr == nil {
+		dbEvent.Data_ = eventData
+	}
+
+	if err = json.Unmarshal(data, &dbEvent); err == nil {
+		ret = &dbEvent
+	} else {
+		err = errCouldNotUnmarshalEvent(ctx, err)
+	}
+	return
+}
+
+func errCouldNotMarshalEvent(ctx context.Context, err error) error {
+	return eh.EventStoreError{
+		Err:       ErrCouldNotMarshalEvent,
+		BaseErr:   err,
+		Namespace: eh.NamespaceFromContext(ctx),
+	}
+}
+
+func errCouldNotUnmarshalEvent(ctx context.Context, err error) error {
+	return eh.EventStoreError{
+		Err:       ErrCouldNotUnmarshalEvent,
+		BaseErr:   err,
+		Namespace: eh.NamespaceFromContext(ctx),
+	}
+}
+
+func errCouldNotLoadAggregate(ctx context.Context, err error) error {
+	return eh.EventStoreError{
+		Err:       ErrCouldNotLoadAggregate,
+		BaseErr:   err,
+		Namespace: eh.NamespaceFromContext(ctx),
+	}
+}
+
+func errIncorrectEventVersion(ctx context.Context) error {
+	return eh.EventStoreError{
+		Err:       eh.ErrIncorrectEventVersion,
+		Namespace: eh.NamespaceFromContext(ctx),
+	}
+}
+
+func errCouldNotSaveAggregate(ctx context.Context, err error) error {
+	return eh.EventStoreError{
+		Err:       ErrCouldNotSaveAggregate,
+		BaseErr:   err,
+		Namespace: eh.NamespaceFromContext(ctx),
+	}
+}
+
+// dbEvent is the internal dbEvent record for the MongoDB dbEvent store used
 // to save and load events from the DB.
 
 type dbEventType struct {
@@ -340,61 +323,50 @@ type dbEventType struct {
 }
 
 type dbEvent struct {
-	EventType eh.EventType `json:"event_type"`
-	Timestamp time.Time    `json:"timestamp"`
-	Version   int          `json:"version"`
-	Data      interface{}  `json:"data,omitempty"`
+	AggregateID_   uuid.UUID        `json:"aggregate_id"`
+	AggregateType_ eh.AggregateType `json:"aggregate_type"`
+	EventType_     eh.EventType     `json:"event_type"`
+	Timestamp_     time.Time        `json:"timestamp"`
+	Version_       int              `json:"version"`
+	Data_          interface{}      `json:"data,omitempty"`
 }
 
-// newDBEvent returns a new dbEvent for an event.
-func newDBEvent(ctx context.Context, event eh.Event) (ret *dbEvent, err error) {
+func newDbEvent(ehEvent eh.Event) (ret *dbEvent, err error) {
 	ret = &dbEvent{
-		EventType: event.EventType(),
-		Timestamp: event.Timestamp(),
-		Version:   event.Version(),
-		Data:      event.Data(),
+		AggregateID_:   ehEvent.AggregateID(),
+		AggregateType_: ehEvent.AggregateType(),
+		EventType_:     ehEvent.EventType(),
+		Timestamp_:     ehEvent.Timestamp(),
+		Version_:       ehEvent.Version(),
+		Data_:          ehEvent.Data(),
 	}
 	return
 }
 
-// event is the private implementation of the eventhorizon.Event interface
-// for a MongoDB event store.
-type event struct {
-	aggregate *aggregateRecord
-	dbEvent
+func (e dbEvent) AggregateID() uuid.UUID {
+	return e.AggregateID_
 }
 
-// AggrgateID implements the AggrgateID method of the eventhorizon.Event interface.
-func (e event) AggregateID() uuid.UUID {
-	return e.aggregate.Id
+func (e dbEvent) AggregateType() eh.AggregateType {
+	return e.AggregateType_
 }
 
-// AggregateType implements the AggregateType method of the eventhorizon.Event interface.
-func (e event) AggregateType() eh.AggregateType {
-	return e.aggregate.Type
+func (e dbEvent) EventType() eh.EventType {
+	return e.EventType_
 }
 
-// EventType implements the EventType method of the eventhorizon.Event interface.
-func (e event) EventType() eh.EventType {
-	return e.dbEvent.EventType
+func (e dbEvent) Data() eh.EventData {
+	return e.Data_
 }
 
-// Data implements the Data method of the eventhorizon.Event interface.
-func (e event) Data() eh.EventData {
-	return e.dbEvent.Data
+func (e dbEvent) Version() int {
+	return e.Version_
 }
 
-// Version implements the Version method of the eventhorizon.Event interface.
-func (e event) Version() int {
-	return e.dbEvent.Version
+func (e dbEvent) Timestamp() time.Time {
+	return e.Timestamp_
 }
 
-// Timestamp implements the Timestamp method of the eventhorizon.Event interface.
-func (e event) Timestamp() time.Time {
-	return e.dbEvent.Timestamp
-}
-
-// String implements the String method of the eventhorizon.Event interface.
-func (e event) String() string {
-	return fmt.Sprintf("%s@%d", e.dbEvent.EventType, e.dbEvent.Version)
+func (e dbEvent) String() string {
+	return fmt.Sprintf("%s@%d", e.EventType_, e.Version_)
 }

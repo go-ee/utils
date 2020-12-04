@@ -18,6 +18,7 @@ require (
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c
 	github.com/klauspost/compress v1.11.3 // indirect
+	github.com/kteru/reversereader v0.0.0-20190328040929-bd5e29d6c056
 	github.com/looplab/eventhorizon v0.8.0
 	github.com/mitchellh/mapstructure v1.4.0 // indirect
 	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
