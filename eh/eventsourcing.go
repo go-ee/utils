@@ -20,166 +20,138 @@ import (
 	"github.com/pkg/errors"
 )
 
-type AggregateInitializer struct {
-	ctx              context.Context
-	cancel           context.CancelFunc
-	aggregateType    eventhorizon.AggregateType
-	aggregateFactory func(id uuid.UUID) eventhorizon.Aggregate
-	entityFactory    func() eventhorizon.Entity
-	commands         []enum.Literal
-	events           []enum.Literal
-
-	eventStore              eventhorizon.EventStore
-	eventBus                eventhorizon.EventBus
-	commandBus              *bus.CommandHandler
-	aggregateStore          *events.AggregateStore
-	commandHandler          *aggregate.CommandHandler
-	projectorListener       DelegateEventHandler
-	setupCallbacks          []func() error
-	readRepos               func(name string, factory func() eventhorizon.Entity) eventhorizon.ReadWriteRepo
-	DefaultProjectorEnabled bool
-	ProjectorRepo           eventhorizon.ReadRepo
+type Middleware struct {
+	EventStore eventhorizon.EventStore
+	EventBus   eventhorizon.EventBus
+	CommandBus *bus.CommandHandler
+	Repos      func(string, func() (ret eventhorizon.Entity)) (ret eventhorizon.ReadWriteRepo)
 }
 
-func NewAggregateInitializer(aggregateType eventhorizon.AggregateType,
+type AggregateEngine struct {
+	*Middleware
+
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	AggregateType    eventhorizon.AggregateType
+	AggregateFactory func(id uuid.UUID) eventhorizon.Aggregate
+	EntityFactory    func() eventhorizon.Entity
+
+	Commands []eventhorizon.CommandType
+	Events   []eventhorizon.EventType
+}
+
+func NewAggregateEngine(middelware *Middleware,
+	aggregateType eventhorizon.AggregateType,
 	aggregateFactory func(id uuid.UUID) eventhorizon.Aggregate,
 	entityFactory func() eventhorizon.Entity,
-	commands []enum.Literal, events []enum.Literal,
-	projectorListener DelegateEventHandler,
-	setupCallbacks []func() error, eventStore eventhorizon.EventStore, eventBus eventhorizon.EventBus, commandBus *bus.CommandHandler,
-	readRepos func(name string, factory func() eventhorizon.Entity) eventhorizon.ReadWriteRepo) (ret *AggregateInitializer) {
+	commands []enum.Literal, events []enum.Literal) (ret *AggregateEngine) {
 	ctx, cancel := context.WithCancel(context.Background())
-	ret = &AggregateInitializer{
-		ctx:               ctx,
-		cancel:            cancel,
-		aggregateType:     aggregateType,
-		aggregateFactory:  aggregateFactory,
-		entityFactory:     entityFactory,
-		commands:          commands,
-		events:            events,
-		projectorListener: projectorListener,
-		setupCallbacks:    setupCallbacks,
 
-		eventStore:              eventStore,
-		eventBus:                eventBus,
-		commandBus:              commandBus,
-		readRepos:               readRepos,
-		DefaultProjectorEnabled: true,
+	ret = &AggregateEngine{
+		Middleware:       middelware,
+		ctx:              ctx,
+		cancel:           cancel,
+		AggregateType:    aggregateType,
+		AggregateFactory: aggregateFactory,
+		EntityFactory:    entityFactory,
+		Commands:         ConvertToCommandTypes(commands),
+		Events:           ConvertToEventTypes(events),
 	}
 	return
 }
 
-func (o *AggregateInitializer) Setup() (err error) {
+func (o *AggregateEngine) Setup() (err error) {
 	//register aggregate factory
-	eventhorizon.RegisterAggregate(o.aggregateFactory)
-
-	if o.aggregateStore, err = events.NewAggregateStore(o.eventStore, o.eventBus); err != nil {
-		return
-	}
-
-	if o.commandHandler, err = aggregate.NewCommandHandler(o.aggregateType, o.aggregateStore); err != nil {
-		return
-	}
+	eventhorizon.RegisterAggregate(o.AggregateFactory)
 
 	if err = o.registerCommands(); err != nil {
 		return
 	}
+	return
+}
 
-	if o.DefaultProjectorEnabled {
-		if err = o.registerProjector(); err != nil {
+func (o *AggregateEngine) registerCommands() (err error) {
+
+	var aggregateStore eventhorizon.AggregateStore
+	if aggregateStore, err = events.NewAggregateStore(o.EventStore, o.EventBus); err != nil {
+		return
+	}
+
+	var commandHandler *aggregate.CommandHandler
+	if commandHandler, err = aggregate.NewCommandHandler(o.AggregateType, aggregateStore); err != nil {
+		return
+	}
+
+	for _, commandType := range o.Commands {
+		if err = o.CommandBus.SetHandler(commandHandler, commandType); err != nil {
 			return
 		}
 	}
+	return
+}
 
-	if o.setupCallbacks != nil {
-		for _, callback := range o.setupCallbacks {
-			if err = callback(); err != nil {
-				return
-			}
-		}
+func (o *AggregateEngine) RegisterProjector(projectorType string, listener DelegateEventHandler) (ret *ProjectorEventHandler, err error) {
+	repo := o.Repos(projectorType, o.EntityFactory)
+	ret = NewProjector(projectorType, listener, repo)
+	proj := projector.NewEventHandler(ret, repo)
+	proj.SetEntityFactory(o.EntityFactory)
+	err = o.RegisterForEvents(proj, listener.EventTypes())
+	return
+}
+
+func (o *AggregateEngine) RegisterForEventsAll(handler eventhorizon.EventHandler) (err error) {
+	err = o.RegisterForEvents(handler, o.Events)
+	return
+}
+
+func (o *AggregateEngine) RegisterForEvents(handler eventhorizon.EventHandler, events []eventhorizon.EventType) (err error) {
+	err = o.EventBus.AddHandler(o.ctx, eventhorizon.MatchEvents(events), handler)
+	return
+}
+
+func (o *AggregateEngine) RegisterForEvent(handler eventhorizon.EventHandler, event enum.Literal) (err error) {
+	err = o.EventBus.AddHandler(o.ctx, eventhorizon.MatchEvents([]eventhorizon.EventType{eventhorizon.EventType(event.Name())}), handler)
+	return
+}
+
+func ConvertToCommandTypes(commands []enum.Literal) []eventhorizon.CommandType {
+	i := 0
+	var commandTypes = make([]eventhorizon.CommandType, len(commands))
+	for _, command := range commands {
+		commandTypes[i] = eventhorizon.CommandType(command.Name())
+		i += 1
 	}
-	return
+	return commandTypes
 }
 
-func (o *AggregateInitializer) registerCommands() (err error) {
-	for _, item := range o.commands {
-		if err = o.commandBus.SetHandler(o.commandHandler, eventhorizon.CommandType(item.Name())); err != nil {
-			return
-		}
+func ConvertToEventTypes(events []enum.Literal) []eventhorizon.EventType {
+	i := 0
+	var eventTypes = make([]eventhorizon.EventType, len(events))
+	for _, command := range events {
+		eventTypes[i] = eventhorizon.EventType(command.Name())
+		i += 1
 	}
-	return
-}
-
-func (o *AggregateInitializer) registerProjector() (err error) {
-	o.ProjectorRepo, err = o.RegisterProjector(o.projectorListener)
-	return
-}
-
-func (o *AggregateInitializer) RegisterProjector(listener DelegateEventHandler) (ret eventhorizon.ReadRepo, err error) {
-	projectorType := string(o.aggregateType)
-	repo := o.readRepos(projectorType, o.entityFactory)
-	proj := projector.NewEventHandler(NewProjector(projectorType, listener), repo)
-	proj.SetEntityFactory(o.entityFactory)
-	err = o.RegisterForAllEvents(proj)
-	ret = repo
-	return
-}
-
-func (o *AggregateInitializer) RegisterForAllEvents(handler eventhorizon.EventHandler) (err error) {
-	eventTypes := make([]eventhorizon.EventType, len(o.events))
-	for i, v := range o.events {
-		eventTypes[i] = eventhorizon.EventType(v.Name())
-	}
-	err = o.eventBus.AddHandler(o.ctx, eventhorizon.MatchEvents(eventTypes), handler)
-	return
-}
-
-func (o *AggregateInitializer) RegisterForEvent(handler eventhorizon.EventHandler, event enum.Literal) (err error) {
-	err = o.eventBus.AddHandler(o.ctx, eventhorizon.MatchEvents([]eventhorizon.EventType{eventhorizon.EventType(event.Name())}), handler)
-	return
+	return eventTypes
 }
 
 type AggregateStoreEvent interface {
-	AppendEvent(eventhorizon.EventType, eventhorizon.EventData, time.Time) eventhorizon.Event
+	AppendEvent(eventhorizon.EventType, eventhorizon.EventData, time.Time, ...eventhorizon.EventOption) eventhorizon.Event
 }
 
 type DelegateCommandHandler interface {
+	CommandTypes() []eventhorizon.CommandType
 	Execute(cmd eventhorizon.Command, entity eventhorizon.Entity, store AggregateStoreEvent) error
 }
 
 type DelegateEventHandler interface {
+	EventTypes() []eventhorizon.EventType
 	Apply(event eventhorizon.Event, entity eventhorizon.Entity) error
 }
 
 type Entity interface {
 	EntityID() uuid.UUID
 	Deleted() *time.Time
-}
-
-type AggregateBase struct {
-	*events.AggregateBase
-	DelegateCommandHandler
-	DelegateEventHandler
-	Entity eventhorizon.Entity
-}
-
-func (o *AggregateBase) HandleCommand(ctx context.Context, cmd eventhorizon.Command) error {
-	return o.Execute(cmd, o.Entity, o.AggregateBase)
-}
-
-func (o *AggregateBase) ApplyEvent(ctx context.Context, event eventhorizon.Event) error {
-	return o.Apply(event, o.Entity)
-}
-
-func NewAggregateBase(aggregateType eventhorizon.AggregateType, id uuid.UUID,
-	commandHandler DelegateCommandHandler, eventHandler DelegateEventHandler,
-	entity eventhorizon.Entity) *AggregateBase {
-	return &AggregateBase{
-		AggregateBase:          events.NewAggregateBase(aggregateType, id),
-		DelegateCommandHandler: commandHandler,
-		DelegateEventHandler:   eventHandler,
-		Entity:                 entity,
-	}
 }
 
 func CommandHandlerNotImplemented(commandType eventhorizon.CommandType) error {
@@ -191,19 +163,19 @@ func EventHandlerNotImplemented(eventType eventhorizon.EventType) error {
 }
 
 func EntityAlreadyExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
-	return errors.New(fmt.Sprintf("entity already exists with id=%v and aggregateType=%v", entityId, aggregateType))
+	return errors.New(fmt.Sprintf("entity already exists with id=%v and AggregateType=%v", entityId, aggregateType))
 }
 
 func EntityNotExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
-	return errors.New(fmt.Sprintf("entity not exists with id=%v and aggregateType=%v", entityId, aggregateType))
+	return errors.New(fmt.Sprintf("entity not exists with id=%v and AggregateType=%v", entityId, aggregateType))
 }
 
 func IdNotDefined(currentId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
-	return errors.New(fmt.Sprintf("id not defined for aggregateType=%v", aggregateType))
+	return errors.New(fmt.Sprintf("id not defined for AggregateType=%v", aggregateType))
 }
 
 func IdsDismatch(entityId uuid.UUID, currentId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
-	return errors.New(fmt.Sprintf("Dismatch entity id and current id, %v != %v, for aggregateType=%v",
+	return errors.New(fmt.Sprintf("Dismatch entity id and current id, %v != %v, for AggregateType=%v",
 		entityId, currentId, aggregateType))
 }
 
@@ -289,12 +261,14 @@ func (o *HttpCommandHandler) HandleCommand(command eventhorizon.Command, w http.
 
 type ProjectorEventHandler struct {
 	DelegateEventHandler
+	Repo          eventhorizon.ReadRepo
 	projectorType projector.Type
 }
 
-func NewProjector(projectorType string, eventHandler DelegateEventHandler) (ret *ProjectorEventHandler) {
+func NewProjector(projectorType string, eventHandler DelegateEventHandler, repo eventhorizon.ReadRepo) (ret *ProjectorEventHandler) {
 	ret = &ProjectorEventHandler{
 		projectorType:        projector.Type(projectorType),
+		Repo:                 repo,
 		DelegateEventHandler: eventHandler,
 	}
 	return

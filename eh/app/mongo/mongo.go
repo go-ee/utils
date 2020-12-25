@@ -10,11 +10,10 @@ import (
 	repo "github.com/looplab/eventhorizon/repo/mongodb"
 )
 
-func NewAppMongo(productName string, appName string, secure bool, serverAddress string, serverPort int,
-	mongoUrl string) *app.AppBase {
+func NewAppMongo(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure bool, mongoUrl string) *app.AppBase {
 	// Create the event store.
 	eventStore := &eh.EventStoreDelegate{Factory: func() (ret eventhorizon.EventStore, err error) {
-		return es.NewEventStore("localhost", productName)
+		return es.NewEventStore("localhost", appInfo.ProductName)
 	}}
 
 	// Create the event bus that distributes events.
@@ -28,7 +27,7 @@ func NewAppMongo(productName string, appName string, secure bool, serverAddress 
 		if item, ok := repos[name]; !ok {
 			ret = &eh.ReadWriteRepoDelegate{Factory: func() (ret eventhorizon.ReadWriteRepo, err error) {
 				var retRepo *repo.Repo
-				if retRepo, err = repo.NewRepo(mongoUrl, productName, name); err == nil {
+				if retRepo, err = repo.NewRepo(mongoUrl, appInfo.ProductName, name); err == nil {
 					retRepo.SetEntityFactory(factory)
 					ret = retRepo
 				}
@@ -40,6 +39,11 @@ func NewAppMongo(productName string, appName string, secure bool, serverAddress 
 		}
 		return
 	}
-	return app.NewAppBase(productName, appName, secure, serverAddress, serverPort,
-		eventStore, eventBus, commandBus, readRepos)
+	return app.NewAppBase(appInfo, serverConfig, secure,
+		&eh.Middleware{
+			EventStore: eventStore,
+			EventBus:   eventBus,
+			CommandBus: commandBus,
+			Repos:      readRepos,
+		})
 }

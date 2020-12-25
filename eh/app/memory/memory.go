@@ -10,7 +10,7 @@ import (
 	repo "github.com/looplab/eventhorizon/repo/memory"
 )
 
-func NewAppMemory(productName string, appName string, secure bool, serverAddress string, serverPort int) *app.AppBase {
+func NewAppMemory(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure bool) *app.AppBase {
 	// Create the event store.
 	eventStore := es.NewEventStore()
 
@@ -35,6 +35,11 @@ func NewAppMemory(productName string, appName string, secure bool, serverAddress
 		}
 		return
 	}
-	return app.NewAppBase(productName, appName, secure, serverAddress, serverPort,
-		eventStore, eventBus, commandBus, readRepos)
+	return app.NewAppBase(appInfo, serverConfig, secure,
+		&eh.Middleware{
+			EventStore: eventStore,
+			EventBus:   eventBus,
+			CommandBus: commandBus,
+			Repos:      readRepos,
+		})
 }

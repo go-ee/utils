@@ -11,54 +11,62 @@ import (
 	"github.com/go-ee/utils/net"
 	"github.com/gorilla/mux"
 	"github.com/looplab/eventhorizon"
-	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"github.com/rs/cors"
 )
 
+type AppInfo struct {
+	AppName     string
+	ProductName string
+}
+
+type ServerConfig struct {
+	ServerAddress string
+	ServerPort    int
+}
+
+func (o *ServerConfig) Link() (ret string) {
+	if o.ServerAddress == "" {
+		ret = fmt.Sprintf("127.0.0.1:%v", o.ServerPort)
+	} else {
+		ret = o.Listen()
+	}
+	return
+}
+
+func (o *ServerConfig) Listen() (ret string) {
+	return fmt.Sprintf("%v:%v", o.ServerAddress, o.ServerPort)
+}
+
 type AppBase struct {
-	ProductName       string
-	Name              string
-	EventStore        eventhorizon.EventStore
-	EventBus          eventhorizon.EventBus
-	CommandBus        *bus.CommandHandler
+	*eh.Middleware
+	*AppInfo
+	*ServerConfig
+
 	ProjectorListener eh.DelegateEventHandler
 	SetupCallbacks    []func() error
-	ReadRepos         func(name string, factory func() eventhorizon.Entity) eventhorizon.ReadWriteRepo
+	Log               *logrus.Entry
+	NewContext        func(namespace string) context.Context
+	Router            *mux.Router
 
-	Log        *logrus.Entry
-	NewContext func(namespace string) context.Context
-	Router     *mux.Router
-	Jwt        *net.JwtController
-	Secure     bool
-
-	serverAddress string
-	serverPort    int
+	Jwt    *net.JwtController
+	Secure bool
 
 	notFoundMessage string
 }
 
-func NewAppBase(productName string, appName string, secure bool, serverAddress string, serverPort int,
-	eventStore eventhorizon.EventStore, eventBus eventhorizon.EventBus, commandBus *bus.CommandHandler,
-	readRepos func(name string, factorySetup func() eventhorizon.Entity) eventhorizon.ReadWriteRepo) (ret *AppBase) {
+func NewAppBase(appInfo *AppInfo, serverConfig *ServerConfig, secure bool, middleware *eh.Middleware) (ret *AppBase) {
 	ret = &AppBase{
-		ProductName: productName,
-		Name:        appName,
-		Secure:      secure,
-		EventStore:  eventStore,
-		EventBus:    eventBus,
-		CommandBus:  commandBus,
-		ReadRepos:   readRepos,
+		Middleware:   middleware,
+		AppInfo:      appInfo,
+		ServerConfig: serverConfig,
 
-		Log: logrus.WithFields(logrus.Fields{"app": appName}),
+		Log: logrus.WithFields(logrus.Fields{"app": appInfo.AppName}),
 		NewContext: func(structure string) context.Context {
-			return eventhorizon.NewContextWithNamespace(context.Background(), appName+"/"+structure)
+			return eventhorizon.NewContextWithNamespace(context.Background(), appInfo.AppName+"/"+structure)
 		},
-		Router: mux.NewRouter().StrictSlash(true),
-
-		serverAddress: serverAddress,
-		serverPort:    serverPort,
-
-		notFoundMessage: fmt.Sprintf("%v: the page is not found", appName),
+		Router:          mux.NewRouter().StrictSlash(true),
+		Secure:          secure,
+		notFoundMessage: fmt.Sprintf("%v: the page is not found", appInfo.AppName),
 	}
 	return
 }
@@ -79,13 +87,8 @@ func (o *AppBase) StartServer() (err error) {
 
 	o.Log.Info(listener.List())
 
-	linkAddress := o.serverAddress
-	if linkAddress == "" {
-		linkAddress = "127.0.0.1"
-	}
-
-	o.Log.Infof("server started, http://%v:%v", linkAddress, o.serverPort)
-	err = http.ListenAndServe(fmt.Sprintf("%v:%v", o.serverAddress, o.serverPort), nil)
+	o.Log.Infof("server started, http://%v", o.ServerConfig.Link())
+	err = http.ListenAndServe(o.Listen(), nil)
 	return
 }
 

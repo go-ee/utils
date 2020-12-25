@@ -274,12 +274,13 @@ type dbEventType struct {
 }
 
 type dbEvent struct {
-	AggregateID_   uuid.UUID        `json:"aggregate_id"`
-	AggregateType_ eh.AggregateType `json:"aggregate_type"`
-	EventType_     eh.EventType     `json:"event_type"`
-	Timestamp_     time.Time        `json:"timestamp"`
-	Version_       int              `json:"version"`
-	Data_          interface{}      `json:"data,omitempty"`
+	AggregateID_   uuid.UUID              `json:"aggregate_id"`
+	AggregateType_ eh.AggregateType       `json:"aggregate_type"`
+	EventType_     eh.EventType           `json:"event_type"`
+	Timestamp_     time.Time              `json:"timestamp"`
+	Version_       int                    `json:"version"`
+	Data_          interface{}            `json:"data,omitempty"`
+	Metadata_      map[string]interface{} `json:"metadata"`
 }
 
 func newDbEvent(ehEvent eh.Event) (ret *dbEvent, err error) {
@@ -290,6 +291,7 @@ func newDbEvent(ehEvent eh.Event) (ret *dbEvent, err error) {
 		Timestamp_:     ehEvent.Timestamp(),
 		Version_:       ehEvent.Version(),
 		Data_:          ehEvent.Data(),
+		Metadata_:      ehEvent.Metadata(),
 	}
 	return
 }
@@ -316,6 +318,10 @@ func (e dbEvent) Version() int {
 
 func (e dbEvent) Timestamp() time.Time {
 	return e.Timestamp_
+}
+
+func (e dbEvent) Metadata() map[string]interface{} {
+	return e.Metadata_
 }
 
 func (e dbEvent) String() string {
