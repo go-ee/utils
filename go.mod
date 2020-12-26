@@ -17,7 +17,7 @@ require (
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c
-	github.com/jinzhu/copier v0.1.0 // indirect
+	github.com/jinzhu/copier v0.1.0
 	github.com/klauspost/compress v1.11.4 // indirect
 	github.com/kteru/reversereader v0.0.0-20190328040929-bd5e29d6c056
 	github.com/looplab/eventhorizon v0.8.0

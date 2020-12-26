@@ -24,7 +24,7 @@ type Middleware struct {
 	EventStore eventhorizon.EventStore
 	EventBus   eventhorizon.EventBus
 	CommandBus *bus.CommandHandler
-	Repos      func(string, func() (ret eventhorizon.Entity)) (ret eventhorizon.ReadWriteRepo)
+	Repos      func(string, func() (ret eventhorizon.Entity)) (ret eventhorizon.ReadWriteRepo, err error)
 }
 
 type AggregateEngine struct {
@@ -92,7 +92,11 @@ func (o *AggregateEngine) registerCommands() (err error) {
 }
 
 func (o *AggregateEngine) RegisterProjector(projectorType string, listener DelegateEventHandler) (ret *ProjectorEventHandler, err error) {
-	repo := o.Repos(projectorType, o.EntityFactory)
+	var repo eventhorizon.ReadWriteRepo
+	if repo, err = o.Repos(projectorType, o.EntityFactory); err != nil {
+		return
+	}
+
 	ret = NewProjector(projectorType, listener, repo)
 	proj := projector.NewEventHandler(ret, repo)
 	proj.SetEntityFactory(o.EntityFactory)
@@ -284,79 +288,6 @@ func (o *ProjectorEventHandler) Project(
 	ret = entity
 	err = o.Apply(event, entity)
 	return
-}
-
-type ReadWriteRepoDelegate struct {
-	Factory func() (ret eventhorizon.ReadWriteRepo, err error)
-	repo    eventhorizon.ReadWriteRepo
-}
-
-func (o *ReadWriteRepoDelegate) delegate() (ret eventhorizon.ReadWriteRepo, err error) {
-	if o.repo == nil {
-		o.repo, err = o.Factory()
-	}
-	ret = o.repo
-	return
-}
-
-func (o *ReadWriteRepoDelegate) Save(ctx context.Context, entity eventhorizon.Entity) (err error) {
-	var repo eventhorizon.ReadWriteRepo
-	if repo, err = o.delegate(); err == nil {
-		err = repo.Save(ctx, entity)
-	}
-	return
-}
-
-func (o *ReadWriteRepoDelegate) Remove(ctx context.Context, id uuid.UUID) (err error) {
-	var repo eventhorizon.ReadWriteRepo
-	if repo, err = o.delegate(); err == nil {
-		err = repo.Remove(ctx, id)
-	}
-	return
-}
-
-func (o *ReadWriteRepoDelegate) Parent() (ret eventhorizon.ReadRepo) {
-	if repo, err := o.delegate(); err == nil {
-		ret = repo.Parent()
-	}
-	return
-}
-
-func (o *ReadWriteRepoDelegate) Find(ctx context.Context, id uuid.UUID) (ret eventhorizon.Entity, err error) {
-	var repo eventhorizon.ReadWriteRepo
-	if repo, err = o.delegate(); err == nil {
-		ret, err = repo.Find(ctx, id)
-	}
-	return
-}
-
-func (o *ReadWriteRepoDelegate) FindAll(ctx context.Context) (ret []eventhorizon.Entity, err error) {
-	var repo eventhorizon.ReadWriteRepo
-	if repo, err = o.delegate(); err == nil {
-		if ret, err = repo.FindAll(ctx); err == nil {
-			ret = o.FilterDeleted(ctx, ret)
-		}
-	}
-	return
-}
-
-func (o *ReadWriteRepoDelegate) FilterDeleted(ctx context.Context, ret []eventhorizon.Entity) []eventhorizon.Entity {
-	n := 0
-	for _, x := range ret {
-		if e, ok := x.(Entity); ok {
-			if e.Deleted() == nil {
-				ret[n] = x
-				n++
-			} else {
-				o.repo.Remove(ctx, e.EntityID())
-			}
-		} else {
-			ret[n] = x
-			n++
-		}
-	}
-	ret = ret[:n]
-	return ret
 }
 
 type EventStoreDelegate struct {

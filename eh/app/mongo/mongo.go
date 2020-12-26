@@ -23,16 +23,13 @@ func NewAppMongo(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure bo
 	commandBus := bus.NewCommandHandler()
 
 	repos := make(map[string]eventhorizon.ReadWriteRepo)
-	readRepos := func(name string, factory func() eventhorizon.Entity) (ret eventhorizon.ReadWriteRepo) {
+	reposFactory := func(name string, factory func() eventhorizon.Entity) (ret eventhorizon.ReadWriteRepo, err error) {
 		if item, ok := repos[name]; !ok {
-			ret = &eh.ReadWriteRepoDelegate{Factory: func() (ret eventhorizon.ReadWriteRepo, err error) {
-				var retRepo *repo.Repo
-				if retRepo, err = repo.NewRepo(mongoUrl, appInfo.ProductName, name); err == nil {
-					retRepo.SetEntityFactory(factory)
-					ret = retRepo
-				}
-				return
-			}}
+			var repoInst *repo.Repo
+			if repoInst, err = repo.NewRepo(mongoUrl, appInfo.ProductName, name); err == nil {
+				repoInst.SetEntityFactory(factory)
+				ret = repoInst
+			}
 			repos[name] = ret
 		} else {
 			ret = item
@@ -44,6 +41,6 @@ func NewAppMongo(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure bo
 			EventStore: eventStore,
 			EventBus:   eventBus,
 			CommandBus: commandBus,
-			Repos:      readRepos,
+			Repos:      reposFactory,
 		})
 }

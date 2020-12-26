@@ -21,14 +21,11 @@ func NewAppMemory(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure b
 	commandBus := bus.NewCommandHandler()
 
 	repos := make(map[string]eventhorizon.ReadWriteRepo)
-	readRepos := func(name string, factory func() eventhorizon.Entity) (ret eventhorizon.ReadWriteRepo) {
+	readRepos := func(name string, factory func() eventhorizon.Entity) (ret eventhorizon.ReadWriteRepo, err error) {
 		if item, ok := repos[name]; !ok {
-			ret = &eh.ReadWriteRepoDelegate{Factory: func() (ret eventhorizon.ReadWriteRepo, err error) {
-				retRepo := repo.NewRepo()
-				retRepo.SetEntityFactory(factory)
-				ret = retRepo
-				return
-			}}
+			repoInst  := repo.NewRepo()
+			repoInst.SetEntityFactory(factory)
+			ret = repoInst
 			repos[name] = ret
 		} else {
 			ret = item

@@ -16,16 +16,12 @@ import (
 )
 
 type EventStore struct {
-	folder            string
-	defaultFolderPerm os.FileMode
-	defaultFilePerm   os.FileMode
+	*Base
 }
 
 func NewEventStore(folder string) *EventStore {
 	return &EventStore{
-		folder:            folder,
-		defaultFolderPerm: 0777,
-		defaultFilePerm:   0644,
+		Base: NewBase(folder),
 	}
 }
 
@@ -145,6 +141,7 @@ func (s *EventStore) noEvents() ([]eh.Event, error) {
 	return []eh.Event{}, nil
 }
 
+/*
 func (s *EventStore) Replace(ctx context.Context, event eh.Event) error {
 	return nil
 }
@@ -152,6 +149,7 @@ func (s *EventStore) Replace(ctx context.Context, event eh.Event) error {
 func (s *EventStore) RenameEvent(ctx context.Context, from, to eh.EventType) error {
 	return nil
 }
+ */
 
 func (s *EventStore) Clear(ctx context.Context) error {
 	if err := os.RemoveAll(s.buildFolderName(ctx)); err != nil {
@@ -164,15 +162,8 @@ func (s *EventStore) Clear(ctx context.Context) error {
 	return nil
 }
 
-func (s *EventStore) Close(ctx context.Context) {
-}
-
 func (s *EventStore) buildFolderName(ctx context.Context) string {
 	return filepath.Join(s.folder, eh.NamespaceFromContext(ctx))
-}
-
-func buildEventsFileName(folder string, aggregateId uuid.UUID) string {
-	return filepath.Join(folder, aggregateId.String()) + ".json"
 }
 
 func scanLastEvent(ctx context.Context, scanner *eio.ReverseScanner) (ret *dbEvent, err error) {
@@ -326,4 +317,8 @@ func (e dbEvent) Metadata() map[string]interface{} {
 
 func (e dbEvent) String() string {
 	return fmt.Sprintf("%s@%d", e.EventType_, e.Version_)
+}
+
+func buildEventsFileName(folder string, id uuid.UUID) string {
+	return filepath.Join(folder, id.String()) + ".json"
 }
