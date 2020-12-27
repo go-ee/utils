@@ -1,12 +1,12 @@
 package email
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-ee/utils/encrypt"
@@ -25,6 +25,7 @@ type EmailData struct {
 	Subject  string
 	Url      string
 	Markdown string
+	Theme    string
 }
 
 func (o *EmailData) ToAsString() string {
@@ -36,14 +37,16 @@ type Engine struct {
 	hermes.Body
 	Sender
 	*encrypt.Encryptor
+	hermesMu sync.RWMutex
 
-	root        string
-	pathStorage string
-	storeEmails bool
+	emailsFolder string
+	storeEmails  bool
 
 	timeFormat string
 	folderPerm os.FileMode
 	filePerm   os.FileMode
+
+	themes *Themes
 }
 
 func NewEngine(config *EngineConfig) (ret *Engine, err error) {
@@ -55,13 +58,15 @@ func NewEngine(config *EngineConfig) (ret *Engine, err error) {
 	}
 
 	ret = &Engine{
-		Hermes:      config.Hermes.ToHermes(),
-		Body:        config.Hermes.Body.ToHermesBody(),
-		Sender:      config.Sender,
-		Encryptor:   encryptor,
-		root:        config.Root,
-		pathStorage: config.PathStorage,
-		storeEmails: config.StoreEmails,
+		Hermes:    config.Hermes.ToHermes(),
+		Body:      config.Hermes.Body.ToHermesBody(),
+		Sender:    config.Sender,
+		Encryptor: encryptor,
+		hermesMu:  sync.RWMutex{},
+
+		themes:       LoadThemes(config.Hermes.ThemesFolder),
+		emailsFolder: config.EmailsFolder,
+		storeEmails:  config.StoreEmails,
 
 		timeFormat: TIME_FORMAT,
 		folderPerm: DEFAULT_FOLDER_PERM,
@@ -77,6 +82,10 @@ func NewEngine(config *EngineConfig) (ret *Engine, err error) {
 
 func (o *Engine) Send(emailData *EmailData) (err error) {
 	logrus.Debugf("Send, %v, %v", emailData.To, emailData.Subject)
+	o.hermesMu.RLock()
+	defer o.hermesMu.RUnlock()
+
+	o.Hermes.Theme = o.themes.LoadTheme(emailData.Theme)
 
 	var message *Message
 	if message, err = o.BuildEmail(
@@ -115,7 +124,7 @@ func (o *Engine) BuildEmail(to, subject string, body hermes.Body) (ret *Message,
 func (o *Engine) storeEmail(label string, htmlMessage *Message, emailData *EmailData) (err error) {
 	fileData := []byte(fmt.Sprintf("request:\n%v\n\nmessage:\n%v\n", label, htmlMessage.PlainText))
 	filePath := filepath.Clean(fmt.Sprintf("%v/%v/%v_%v.txt",
-		o.pathStorage, strings.Join(emailData.To, "_"), emailData.Subject, time.Now().Format(o.timeFormat)))
+		o.emailsFolder, strings.Join(emailData.To, "_"), emailData.Subject, time.Now().Format(o.timeFormat)))
 
 	if err = os.MkdirAll(filepath.Dir(filePath), o.folderPerm); err != nil {
 		return
@@ -130,24 +139,12 @@ func (o *Engine) storeEmail(label string, htmlMessage *Message, emailData *Email
 }
 
 func (o *Engine) checkAndCreateStorage() (err error) {
-	o.storeEmails = false
-	if o.pathStorage != "" {
-		if err = os.MkdirAll(o.pathStorage, 0755); err == nil {
+	if o.storeEmails && o.emailsFolder != "" {
+		if err = os.MkdirAll(o.emailsFolder, 0755); err == nil {
 			o.storeEmails = true
-			logrus.Infof("use the storage path: %v", o.pathStorage)
+			logrus.Infof("use the storage path: %v", o.emailsFolder)
 		} else {
-			logrus.Infof("can't create the storage path '%v': %v", o.pathStorage, err)
-		}
-	}
-	return
-}
-
-func (o *Engine) checkAndCreateStatic() (err error) {
-	if o.root != "" {
-		if err = os.MkdirAll(o.root, 0755); err == nil {
-			logrus.Infof("use the static path: %v", o.root)
-		} else {
-			err = errors.New("path for static files not defined")
+			logrus.Infof("can't create the storage path '%v': %v", o.emailsFolder, err)
 		}
 	}
 	return

@@ -31,10 +31,22 @@ func sendByEngine() (err error) {
 }
 
 func emailDataDefault() *EmailData {
+
 	return &EmailData{
 		To:      []string{"eoeisler@gmail.com"},
 		Name:    "TestEugen",
 		Subject: "Berufung: Anmeldung Seminar",
 		Url:     "www.reguel.de",
+		Theme:   "default2",
+		Markdown:
+		`# Test
+dsfs
+sdfsd
+## sdfsd
+### sdf
+fsdf
+sdf
+sdf
+sd`,
 	}
 }

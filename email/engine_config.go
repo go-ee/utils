@@ -1,6 +1,8 @@
 package email
 
 import (
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/kelseyhightower/envconfig"
@@ -134,6 +136,9 @@ func (o *Button) ToHermesButton() hermes.Button {
 }
 
 type Hermes struct {
+	ThemesFolder       string `yaml:"themesFolder", envconfig:"PATH_THEMES"`
+	Theme              string `yaml:"theme", envconfig:"THEME"`
+	TextDirection      string
 	Product            Product `yaml:"product"`
 	DisableCSSInlining bool    `yaml:"disableCSSInlining"`
 	Body               Body    `yaml:"body"`
@@ -141,14 +146,14 @@ type Hermes struct {
 
 func (o *Hermes) ToHermes() hermes.Hermes {
 	return hermes.Hermes{
+		TextDirection:      hermes.TextDirection(o.TextDirection),
 		Product:            o.Product.ToHermesProduct(),
 		DisableCSSInlining: o.DisableCSSInlining,
 	}
 }
 
 type EngineConfig struct {
-	Root              string `yaml:"root", envconfig:"PATH_ROOT"`
-	PathStorage       string `yaml:"pathStorage", envconfig:"PATH_STORAGE"`
+	EmailsFolder      string `yaml:"emailsFolder", envconfig:"PATH_EMAILS"`
 	StoreEmails       bool   `yaml:"storeEmails", envconfig:"STORE_EMAILS"`
 	EncryptPassphrase string `yaml:"encryptPassphrase", envconfig:"ENCRYPT_PASSPHRASE"`
 	Hermes            Hermes `yaml:"hermes"`
@@ -174,6 +179,7 @@ func EngineConfigLoad(configFileYaml string, cfg *EngineConfig) (err error) {
 
 	decoder := yaml.NewDecoder(file)
 	if err = decoder.Decode(cfg); err != nil {
+		err = errors.New(fmt.Sprintf("can't load the engine config '%v', '%v", configFileYaml, err))
 		return
 	}
 	err = envconfig.Process("", cfg)
@@ -199,8 +205,7 @@ func (o *EngineConfig) WriteFileYaml(configFileYaml string) (err error) {
 
 func EngineCinfigDefault() (ret *EngineConfig) {
 	ret = &EngineConfig{
-		Root:        "templates",
-		PathStorage: "storage",
+		EmailsFolder: "storage",
 		Sender: Sender{
 			Email:    "info@example.com",
 			Identity: "Info",
@@ -212,6 +217,7 @@ func EngineCinfigDefault() (ret *EngineConfig) {
 			},
 		},
 		Hermes: Hermes{
+			ThemesFolder: "themes",
 			Product: Product{
 				Name:      "ExampleProduct",
 				Link:      "www.example.com",
@@ -231,11 +237,10 @@ func EngineCinfigDefault() (ret *EngineConfig) {
 	return
 }
 
-
 /*
 
 Hinweis: Du bekommst am Tag des jeweiligen Kurses auf deine E-Mail einen Link zum Online-Seminar zu welchemdu dich angemeldet hast. Bitte denke daran die Zoom-Software zu installieren. Hier sind nochmal die Links dazu: Adroid: https://play.google.com/store/apps/details?id=us.zoom.videomeetings&hl=de&gl=USApple: https://apps.apple.com/de/app/zoom-cloud-meetings/id546505307PC: https://zoom.us/support/downloadIch freue mich auf deine Teilnahme,Dr. Leo Frank-- Diese Anmeldung wurde von der Webseite "Seminar Berufung aus christlicher Sicht" (http://vongottberufen.de)gesendet.
 
 
 
- */
+*/
