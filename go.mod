@@ -18,9 +18,11 @@ require (
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c
 	github.com/jinzhu/copier v0.1.0
+	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/klauspost/compress v1.11.4 // indirect
 	github.com/kteru/reversereader v0.0.0-20190328040929-bd5e29d6c056
 	github.com/looplab/eventhorizon v0.8.0
+	github.com/matcornic/hermes/v2 v2.1.0
 	github.com/mitchellh/mapstructure v1.4.0 // indirect
 	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1
@@ -37,6 +39,7 @@ require (
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 )
 
 replace github.com/looplab/eventhorizon => /home/z000ru5y/go/src/github.com/looplab/eventhorizon
