@@ -155,22 +155,17 @@ func (o *Hermes) ToHermes() hermes.Hermes {
 type EngineConfig struct {
 	EmailsFolder      string `yaml:"emailsFolder", envconfig:"PATH_EMAILS"`
 	StoreEmails       bool   `yaml:"storeEmails", envconfig:"STORE_EMAILS"`
-	EncryptPassphrase string `yaml:"encryptPassphrase", envconfig:"ENCRYPT_PASSPHRASE"`
 	Hermes            Hermes `yaml:"hermes"`
 	Sender            Sender `yaml:"sender"`
 }
 
 func (o *EngineConfig) Setup() (err error) {
-	if o.EncryptPassphrase == "" {
-		o.EncryptPassphrase = o.Sender.Email + o.Sender.SMTP.Password
-	}
-
 	err = o.Sender.Setup()
 
 	return
 }
 
-func EngineConfigLoad(configFileYaml string, cfg *EngineConfig) (err error) {
+func EngineConfigFileYamlLoad(configFileYaml string, cfg *EngineConfig) (err error) {
 	var file *os.File
 	if file, err = os.Open(configFileYaml); err != nil {
 		return

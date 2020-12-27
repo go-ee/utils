@@ -51,17 +51,10 @@ type Engine struct {
 
 func NewEngine(config *EngineConfig) (ret *Engine, err error) {
 
-	var encryptor *encrypt.Encryptor
-
-	if encryptor, err = encrypt.NewEncryptor(config.EncryptPassphrase); err != nil {
-		return
-	}
-
 	ret = &Engine{
 		Hermes:    config.Hermes.ToHermes(),
 		Body:      config.Hermes.Body.ToHermesBody(),
 		Sender:    config.Sender,
-		Encryptor: encryptor,
 		hermesMu:  sync.RWMutex{},
 
 		themes:       LoadThemes(config.Hermes.ThemesFolder),

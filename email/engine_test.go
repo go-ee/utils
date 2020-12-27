@@ -13,7 +13,7 @@ func TestEngineSend(t *testing.T) {
 
 func sendByEngine() (err error) {
 	var config EngineConfig
-	if err = EngineConfigLoad("engine-config.yml", &config); err != nil {
+	if err = EngineConfigFileYamlLoad("engine-config.yml", &config); err != nil {
 		return
 	}
 
