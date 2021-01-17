@@ -79,12 +79,12 @@ func (o *JwtController) LoginHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var user UserCredentials
 		if err := Decode(&user, r); err != nil {
-			ResponseResultErr(err, "Can't retrieve credentials", http.StatusForbidden, w)
+			ResponseResultErr(err, "Can't retrieve credentials", nil, http.StatusForbidden, w)
 			return
 		}
 
 		if account, err := o.authenticate(user); err != nil {
-			ResponseResultErr(err, "Wrong credentials", http.StatusForbidden, w)
+			ResponseResultErr(err, "Wrong credentials", nil, http.StatusForbidden, w)
 		} else {
 			token := jwt.New(jwt.SigningMethodRS256)
 			claims := make(jwt.MapClaims)
@@ -93,7 +93,7 @@ func (o *JwtController) LoginHandler() http.HandlerFunc {
 			token.Claims = claims
 
 			if tokenString, err := token.SignedString(o.signKey); err != nil {
-				ResponseResultErr(err, "Error while signing the token", http.StatusInternalServerError, w)
+				ResponseResultErr(err, "Error while signing the token", nil, http.StatusInternalServerError, w)
 				w.WriteHeader(http.StatusInternalServerError)
 			} else {
 				if o.useHttpCookie {

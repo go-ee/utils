@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"log"
@@ -38,17 +39,18 @@ func ResponseJsonCode(response interface{}, code int, w http.ResponseWriter) (er
 }
 
 type Result struct {
-	Ok  bool   `json:"ok,omitempty"`
-	Msg string `json:"msg,omitempty"`
-	Err string `json:"err,omitempty"`
+	Ok   bool        `json:"ok,omitempty"`
+	Item interface{} `json:"item,omitempty"`
+	Msg  string      `json:"msg,omitempty"`
+	Err  string      `json:"err,omitempty"`
 }
 
-func ResponseResultErr(err error, msg string, code int, w http.ResponseWriter) error {
+func ResponseResultErr(err error, msg string, item interface{}, code int, w http.ResponseWriter) error {
 	return ResponseJsonCode(Result{Ok: false, Msg: msg, Err: err.Error()}, code, w)
 }
 
-func ResponseResultOk(msg string, w http.ResponseWriter) error {
-	return ResponseJson(Result{Ok: true, Msg: msg}, w)
+func ResponseResultOk(msg string, item interface{}, w http.ResponseWriter) error {
+	return ResponseJson(Result{Ok: true, Item: item, Msg: msg}, w)
 }
 
 func Decode(item interface{}, r *http.Request) (err error) {
@@ -191,4 +193,17 @@ func CorsWrap(allowPattern string, h http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", allowPattern)
 		h.ServeHTTP(w, r)
 	})
+}
+
+
+func LogBody(w http.ResponseWriter, r *http.Request) bool {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		logrus.Infof("error reading body: %v", err)
+		http.Error(w, "can't read body", http.StatusBadRequest)
+		return true
+	} else {
+		logrus.Infof("body: %s", body)
+	}
+	return false
 }

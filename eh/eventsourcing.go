@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/looplab/eventhorizon/eventhandler/saga"
 	"html"
 	"io"
 	"net/http"
@@ -114,6 +115,12 @@ func (o *AggregateEngine) RegisterForEvents(handler eventhorizon.EventHandler, e
 	return
 }
 
+func (o *AggregateEngine) RegisterSagaForEvents(aSaga saga.Saga, events []eventhorizon.EventType) (err error) {
+	responseSaga := saga.NewEventHandler(aSaga, o.CommandBus)
+	err = o.RegisterForEvents(responseSaga, events)
+	return
+}
+
 func (o *AggregateEngine) RegisterForEvent(handler eventhorizon.EventHandler, event enum.Literal) (err error) {
 	err = o.EventBus.AddHandler(o.ctx, eventhorizon.MatchEvents([]eventhorizon.EventType{eventhorizon.EventType(event.Name())}), handler)
 	return
@@ -172,6 +179,16 @@ func EntityAlreadyExists(entityId uuid.UUID, aggregateType eventhorizon.Aggregat
 
 func EntityNotExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
 	return errors.New(fmt.Sprintf("entity not exists with id=%v and AggregateType=%v", entityId, aggregateType))
+}
+
+func EntityChildNotExists(entityId uuid.UUID, aggregateType eventhorizon.AggregateType, childId uuid.UUID, childType string) error {
+	return errors.New(fmt.Sprintf("%v(%v) not exists, %v(%v)",
+		childType, childId, aggregateType, entityId))
+}
+
+func EntityChildIdNotDefined(entityId uuid.UUID, aggregateType eventhorizon.AggregateType, childType string) error {
+	return errors.New(fmt.Sprintf("id for '%v' not defined, %v(%v)",
+		childType, aggregateType, entityId))
 }
 
 func IdNotDefined(currentId uuid.UUID, aggregateType eventhorizon.AggregateType) error {
@@ -249,17 +266,18 @@ func (o *HttpCommandHandler) HandleCommand(command eventhorizon.Command, w http.
 	err := net.Decode(command, r)
 
 	if err != nil && err != io.EOF {
-		net.ResponseResultErr(err, fmt.Sprintf("Can't decode body to command %T", command),
-			http.StatusBadRequest, w)
+		net.ResponseResultErr(err, fmt.Sprintf("can't decode body to command %T", command),
+			command, http.StatusBadRequest, w)
 		return
 	}
 
+	path := html.EscapeString(r.URL.Path)
 	if err = o.CommandBus.HandleCommand(o.Context, command); err != nil {
-		net.ResponseResultErr(err, fmt.Sprintf("failed, command %T, %v", command, command),
-			http.StatusExpectationFailed, w)
+		net.ResponseResultErr(err,
+			fmt.Sprintf("failed, command %T, %v", command, path), command, http.StatusExpectationFailed, w)
 	} else {
-		net.ResponseResultOk(fmt.Sprintf("succefully, command %T, %v, %v", command, command,
-			html.EscapeString(r.URL.Path)), w)
+		net.ResponseResultOk(
+			fmt.Sprintf("succefully, command %T, %v", command, path), command, w)
 	}
 }
 
