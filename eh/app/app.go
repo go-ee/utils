@@ -15,8 +15,9 @@ import (
 )
 
 type AppInfo struct {
-	AppName     string
-	ProductName string
+	AppName       string
+	ProductName   string
+	WorkingFolder string
 }
 
 type ServerConfig struct {

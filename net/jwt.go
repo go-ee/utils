@@ -2,14 +2,12 @@ package net
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/dgrijalva/jwt-go/request"
-	"crypto/rsa"
-	"os/user"
 )
 
 type UserCredentials struct {
@@ -27,51 +25,39 @@ type AccountToken struct {
 }
 
 type JwtController struct {
-	privKeyPath   string //app.rsa, e.g. $ openssl genrsa -out app.rsa 1024
-	pubKeyPath    string //app.rsa.pub, e.g $ openssl rsa -in app.rsa -pubout > app.rsa.pub
+	//app.rsa, e.g. $ openssl genrsa -out app.rsa 1024
+	//app.rsa.pub, e.g $ openssl rsa -in app.rsa -pubout > app.rsa.pub
+
+	appName       string // needed for cookie
+	rsaKeys       *RsaKeys
 	useHttpCookie bool
 
 	authenticate func(UserCredentials) (ret interface{}, err error)
-
-	verifyKey *rsa.PublicKey
-	signKey   *rsa.PrivateKey
 }
 
-func NewJwtController(privKeyPath, pubKeyPath string, useHttpCookie bool,
+func NewJwtController(appName string, rsaKeys *RsaKeys, useHttpCookie bool,
 	authenticator func(UserCredentials) (ret interface{}, err error)) *JwtController {
-	return &JwtController{privKeyPath: privKeyPath, pubKeyPath: pubKeyPath, useHttpCookie: useHttpCookie,
-		authenticate: authenticator}
+
+	return &JwtController{appName: appName, rsaKeys: rsaKeys,
+		useHttpCookie: useHttpCookie, authenticate: authenticator}
 }
 
-func NewJwtControllerApp(appName string, authenticator func(UserCredentials) (ret interface{}, err error)) (ret *JwtController) {
-	if usr, err := user.Current(); err == nil {
-		ret = NewJwtController(
-			fmt.Sprintf("%v/.rsa/%v.rsa", usr.HomeDir, appName),
-			fmt.Sprintf("%v/.rsa/%v.rsa.pub", usr.HomeDir, appName), true,
-			authenticator)
-		if err := ret.Setup(); err != nil {
-			panic(err)
-		}
-		return
-	} else {
-		panic(err)
-	}
+func NewJwtControllerApp(certsFolder string, appName string,
+	authenticator func(UserCredentials) (ret interface{}, err error)) (ret *JwtController, err error) {
+
+	keyBaseName := strings.ToLower(appName)
+	rsaKeys := RsaKeysNew(certsFolder, keyBaseName)
+
+	ret = NewJwtController(
+		appName,
+		rsaKeys, true,
+		authenticator)
+	err = ret.Setup()
 	return
 }
 
 func (o *JwtController) Setup() (err error) {
-	var keyBytes []byte
-	if keyBytes, err = ioutil.ReadFile(o.privKeyPath); err == nil {
-		o.signKey, err = jwt.ParseRSAPrivateKeyFromPEM(keyBytes)
-	}
-
-	if err != nil {
-		return
-	}
-
-	if keyBytes, err = ioutil.ReadFile(o.pubKeyPath); err == nil {
-		o.verifyKey, err = jwt.ParseRSAPublicKeyFromPEM(keyBytes)
-	}
+	err = o.rsaKeys.LoadOrCreate()
 	return
 }
 
@@ -79,12 +65,12 @@ func (o *JwtController) LoginHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var user UserCredentials
 		if err := Decode(&user, r); err != nil {
-			ResponseResultErr(err, "Can't retrieve credentials", nil, http.StatusForbidden, w)
+			ResponseResultErr(err, "can't retrieve credentials", nil, http.StatusForbidden, w)
 			return
 		}
 
 		if account, err := o.authenticate(user); err != nil {
-			ResponseResultErr(err, "Wrong credentials", nil, http.StatusForbidden, w)
+			ResponseResultErr(err, "wrong credentials", nil, http.StatusForbidden, w)
 		} else {
 			token := jwt.New(jwt.SigningMethodRS256)
 			claims := make(jwt.MapClaims)
@@ -92,13 +78,13 @@ func (o *JwtController) LoginHandler() http.HandlerFunc {
 			claims["iat"] = time.Now().Unix()
 			token.Claims = claims
 
-			if tokenString, err := token.SignedString(o.signKey); err != nil {
-				ResponseResultErr(err, "Error while signing the token", nil, http.StatusInternalServerError, w)
+			if tokenString, err := token.SignedString(o.rsaKeys.private); err != nil {
+				ResponseResultErr(err, "wrror while signing the token", nil, http.StatusInternalServerError, w)
 				w.WriteHeader(http.StatusInternalServerError)
 			} else {
 				if o.useHttpCookie {
 					expireCookie := time.Now().Add(time.Hour * 1)
-					cookie := http.Cookie{Name: "Auth", Value: tokenString, Expires: expireCookie, HttpOnly: true}
+					cookie := http.Cookie{Name: "auth", Value: tokenString, Expires: expireCookie, HttpOnly: true}
 					http.SetCookie(w, &cookie)
 				}
 				ResponseJson(AccountToken{Account: account, Token: tokenString}, w)
@@ -123,7 +109,7 @@ func (o *JwtController) ValidateToken(w http.ResponseWriter, r *http.Request, ne
 
 	token, err := request.ParseFromRequest(r, o,
 		func(token *jwt.Token) (interface{}, error) {
-			return o.verifyKey, nil
+			return o.rsaKeys.Public(), nil
 		})
 
 	if err == nil {
@@ -131,17 +117,17 @@ func (o *JwtController) ValidateToken(w http.ResponseWriter, r *http.Request, ne
 			next.ServeHTTP(w, r)
 		} else {
 			w.WriteHeader(http.StatusUnauthorized)
-			fmt.Fprint(w, "Token is not valid")
+			fmt.Fprint(w, "token is not valid")
 		}
 	} else {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, "Unauthorized access to this resource")
+		fmt.Fprint(w, "unauthorized access to this resource")
 	}
 }
 
 func (o *JwtController) Logout(w http.ResponseWriter) {
 	if o.useHttpCookie {
-		deleteCookie := http.Cookie{Name: "Auth", Value: "none", Expires: time.Now()}
+		deleteCookie := http.Cookie{Name: o.appName, Value: "none", Expires: time.Now()}
 		http.SetCookie(w, &deleteCookie)
 	}
 }
@@ -149,7 +135,7 @@ func (o *JwtController) Logout(w http.ResponseWriter) {
 func (o *JwtController) ExtractToken(r *http.Request) (ret string, err error) {
 	if o.useHttpCookie {
 		var cookie *http.Cookie
-		if cookie, err = r.Cookie("Auth"); err == nil {
+		if cookie, err = r.Cookie(o.appName); err == nil {
 			ret = cookie.Value
 		}
 	} else {
