@@ -1,8 +1,6 @@
 package cliu
 
-import (
-	"github.com/urfave/cli/v2"
-)
+import "github.com/urfave/cli/v2"
 
 type BoolFlag struct {
 	*cli.BoolFlag
