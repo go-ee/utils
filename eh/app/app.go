@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/go-ee/utils/lg"
 	"github.com/go-ee/utils/net/muxlist"
-	"go.uber.org/zap"
 	"net/http"
 
 	"github.com/go-ee/utils/eh"
@@ -14,7 +14,7 @@ import (
 	"github.com/rs/cors"
 )
 
-type AppInfo struct {
+type Info struct {
 	AppName       string
 	ProductName   string
 	WorkingFolder string
@@ -38,14 +38,13 @@ func (o *ServerConfig) Listen() (ret string) {
 	return fmt.Sprintf("%v:%v", o.ServerAddress, o.ServerPort)
 }
 
-type AppBase struct {
+type Base struct {
 	*eh.Middleware
-	*AppInfo
+	*Info
 	*ServerConfig
 
 	ProjectorListener eh.DelegateEventHandler
 	SetupCallbacks    []func() error
-	Log               *logrus.Entry
 	NewContext        func(namespace string) context.Context
 	Router            *mux.Router
 
@@ -55,13 +54,12 @@ type AppBase struct {
 	notFoundMessage string
 }
 
-func NewAppBase(appInfo *AppInfo, serverConfig *ServerConfig, secure bool, middleware *eh.Middleware) (ret *AppBase) {
-	ret = &AppBase{
+func NewAppBase(appInfo *Info, serverConfig *ServerConfig, secure bool, middleware *eh.Middleware) (ret *Base) {
+	ret = &Base{
 		Middleware:   middleware,
-		AppInfo:      appInfo,
+		Info:         appInfo,
 		ServerConfig: serverConfig,
 
-		Log: logrus.WithFields(logrus.Fields{"app": appInfo.AppName}),
 		NewContext: func(structure string) context.Context {
 			return eventhorizon.NewContextWithNamespace(context.Background(), appInfo.AppName+"/"+structure)
 		},
@@ -72,7 +70,7 @@ func NewAppBase(appInfo *AppInfo, serverConfig *ServerConfig, secure bool, middl
 	return
 }
 
-func (o *AppBase) StartServer() (err error) {
+func (o *Base) StartServer() (err error) {
 	o.Router.NotFoundHandler = http.HandlerFunc(o.NoFound)
 	if o.Secure {
 		o.Router.Path("/logout").Name("Logout").Handler(o.Jwt.LogoutHandler())
@@ -86,13 +84,13 @@ func (o *AppBase) StartServer() (err error) {
 
 	listener := muxlist.NewGorillaMuxLister(o.Router)
 
-	o.Log.Info(listener.List())
+	lg.LOG.Info(listener.List())
 
-	o.Log.Infof("server started, http://%v", o.ServerConfig.Link())
+	lg.LOG.Infof("server started, http://%v", o.ServerConfig.Link())
 	err = http.ListenAndServe(o.Listen(), nil)
 	return
 }
 
-func (o *AppBase) NoFound(w http.ResponseWriter, _ *http.Request) {
+func (o *Base) NoFound(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, o.notFoundMessage, http.StatusNotFound)
 }

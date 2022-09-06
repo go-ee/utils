@@ -10,9 +10,9 @@ import (
 	repo "github.com/looplab/eventhorizon/repo/memory"
 )
 
-func NewAppMemory(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure bool) *app.AppBase {
+func NewAppMemory(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool) *app.Base {
 	// Create the event store.
-	eventStore := es.NewEventStore()
+	eventStore, _ := es.NewEventStore()
 
 	// Create the event bus that distributes events.
 	eventBus := eb.NewEventBus(nil)
@@ -23,7 +23,7 @@ func NewAppMemory(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure b
 	repos := make(map[string]eventhorizon.ReadWriteRepo)
 	readRepos := func(name string, factory func() eventhorizon.Entity) (ret eventhorizon.ReadWriteRepo, err error) {
 		if item, ok := repos[name]; !ok {
-			repoInst  := repo.NewRepo()
+			repoInst := repo.NewRepo()
 			repoInst.SetEntityFactory(factory)
 			ret = repoInst
 			repos[name] = ret

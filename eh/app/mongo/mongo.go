@@ -10,7 +10,7 @@ import (
 	repo "github.com/looplab/eventhorizon/repo/mongodb"
 )
 
-func NewAppMongo(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure bool, mongoUrl string) *app.AppBase {
+func NewAppMongo(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool, mongoUrl string) *app.Base {
 	// Create the event store.
 	eventStore := &eh.EventStoreDelegate{Factory: func() (ret eventhorizon.EventStore, err error) {
 		return es.NewEventStore("localhost", appInfo.ProductName)

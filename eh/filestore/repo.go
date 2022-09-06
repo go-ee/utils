@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	esh "github.com/go-ee/utils/eh"
 	"github.com/go-ee/utils/eio"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -53,9 +54,10 @@ func (r *Repo) Parent() eh.ReadRepo {
 // Find implements the Find method of the eventhorizon.ReadRepo interface.
 func (r *Repo) Find(ctx context.Context, id uuid.UUID) (ret eh.Entity, err error) {
 	if r.factoryFn == nil {
-		return nil, eh.RepoError{
-			Err:       ErrModelNotSet,
-			Namespace: eh.NamespaceFromContext(ctx),
+		return nil, &eh.RepoError{
+			Err:      fmt.Errorf("%v: %v", ErrModelNotSet, esh.ContextGetNamespace(ctx)),
+			Op:       eh.RepoOpFind,
+			EntityID: id,
 		}
 	}
 
@@ -69,9 +71,10 @@ func (r *Repo) Find(ctx context.Context, id uuid.UUID) (ret eh.Entity, err error
 
 	item, ok := r.db[ns][id]
 	if !ok {
-		return nil, eh.RepoError{
-			Err:       eh.ErrEntityNotFound,
-			Namespace: eh.NamespaceFromContext(ctx),
+		return nil, &eh.RepoError{
+			Err:      fmt.Errorf("%v: %v", eh.ErrEntityNotFound, esh.ContextGetNamespace(ctx)),
+			Op:       eh.RepoOpFind,
+			EntityID: id,
 		}
 	}
 	ret = r.factoryFn()
@@ -83,9 +86,9 @@ func (r *Repo) Find(ctx context.Context, id uuid.UUID) (ret eh.Entity, err error
 // FindAll implements the FindAll method of the eventhorizon.ReadRepo interface.
 func (r *Repo) FindAll(ctx context.Context) (ret []eh.Entity, err error) {
 	if r.factoryFn == nil {
-		return nil, eh.RepoError{
-			Err:       ErrModelNotSet,
-			Namespace: eh.NamespaceFromContext(ctx),
+		return nil, &eh.RepoError{
+			Err: fmt.Errorf("%v: %v", ErrModelNotSet, esh.ContextGetNamespace(ctx)),
+			Op:  eh.RepoOpFindAll,
 		}
 	}
 
@@ -111,9 +114,10 @@ func (r *Repo) FindAll(ctx context.Context) (ret []eh.Entity, err error) {
 // Save implements the Save method of the eventhorizon.WriteRepo interface.
 func (r *Repo) Save(ctx context.Context, entity eh.Entity) (err error) {
 	if r.factoryFn == nil {
-		return eh.RepoError{
-			Err:       ErrModelNotSet,
-			Namespace: eh.NamespaceFromContext(ctx),
+		return &eh.RepoError{
+			Err:      fmt.Errorf("%v: %v", ErrModelNotSet, esh.ContextGetNamespace(ctx)),
+			Op:       eh.RepoOpSave,
+			EntityID: entity.EntityID(),
 		}
 	}
 
@@ -126,10 +130,9 @@ func (r *Repo) Save(ctx context.Context, entity eh.Entity) (err error) {
 	}
 
 	if entity.EntityID() == uuid.Nil {
-		return eh.RepoError{
-			Err:       eh.ErrCouldNotSaveEntity,
-			BaseErr:   eh.ErrMissingEntityID,
-			Namespace: eh.NamespaceFromContext(ctx),
+		return &eh.RepoError{
+			Err: fmt.Errorf("could not save entity, missing entity id: %v", esh.ContextGetNamespace(ctx)),
+			Op:  eh.RepoOpSave,
 		}
 	}
 
@@ -172,9 +175,9 @@ func (r *Repo) Remove(ctx context.Context, id uuid.UUID) (err error) {
 		return
 	}
 
-	err = eh.RepoError{
-		Err:       eh.ErrEntityNotFound,
-		Namespace: eh.NamespaceFromContext(ctx),
+	err = &eh.RepoError{
+		Err: fmt.Errorf("%v: %v", eh.ErrEntityNotFound, esh.ContextGetNamespace(ctx)),
+		Op:  eh.RepoOpRemove,
 	}
 	return
 }
@@ -187,7 +190,7 @@ func (r *Repo) SetEntityFactory(f func() eh.Entity) {
 
 // Helper to get the namespace and ensure that its data exists.
 func (r *Repo) namespace(ctx context.Context) (ns string, err error) {
-	ns = eh.NamespaceFromContext(ctx)
+	ns = esh.ContextGetNamespace(ctx)
 	err = r.loadFile(ns)
 	return
 }
@@ -196,10 +199,9 @@ func (r *Repo) loadFile(ns string) (err error) {
 	if _, ok := r.db[ns]; !ok {
 		fileJson := r.buildFileNameAndMkdirParents(ns)
 		if items, jsonErr := eio.LoadArrayJsonByReflect(fileJson, r.entityType); err != nil {
-			err = eh.RepoError{
-				Err:       eh.ErrCouldNotLoadEntity,
-				BaseErr:   jsonErr,
-				Namespace: ns,
+			err = &eh.RepoError{
+				Err: fmt.Errorf("could not load entity, %v: %v", jsonErr, ns),
+				Op:  eh.RepoOpFind,
 			}
 		} else {
 			data := map[uuid.UUID]eh.Entity{}
@@ -227,11 +229,10 @@ func (r *Repo) saveFile(ns string) (err error) {
 	data, _ := json.MarshalIndent(items, "", "  ")
 	fileJson := r.buildFileNameAndMkdirParents(ns)
 
-	if writeErr := ioutil.WriteFile(fileJson, data, r.defaultFilePerm); writeErr != nil {
-		err = eh.RepoError{
-			Err:       eh.ErrCouldNotSaveEntity,
-			BaseErr:   writeErr,
-			Namespace: ns,
+	if writeErr := os.WriteFile(fileJson, data, r.defaultFilePerm); writeErr != nil {
+		err = &eh.RepoError{
+			Err: fmt.Errorf("could not save entity:  %v", ns),
+			Op:  eh.RepoOpSave,
 		}
 	}
 	return

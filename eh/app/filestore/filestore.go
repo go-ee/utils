@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 )
 
-func NewAppFileStore(appInfo *app.AppInfo, serverConfig *app.ServerConfig, secure bool, storeFolder string) *app.AppBase {
+func NewAppFileStore(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool, storeFolder string) *app.Base {
 
 	// Create the event store.
 	eventStore := es.NewEventStore(filepath.Join(storeFolder, "eventstore"))

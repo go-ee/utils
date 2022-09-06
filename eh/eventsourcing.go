@@ -75,7 +75,7 @@ func (o *AggregateEngine) Setup() (err error) {
 func (o *AggregateEngine) registerCommands() (err error) {
 
 	var aggregateStore eventhorizon.AggregateStore
-	if aggregateStore, err = events.NewAggregateStore(o.EventStore, o.EventBus); err != nil {
+	if aggregateStore, err = events.NewAggregateStore(o.EventStore); err != nil {
 		return
 	}
 
@@ -335,4 +335,22 @@ func (o *EventStoreDelegate) Load(ctx context.Context, id uuid.UUID) (ret []even
 		ret, err = eventStore.Load(ctx, id)
 	}
 	return
+}
+
+func (o *EventStoreDelegate) Close() (err error) {
+	var eventStore eventhorizon.EventStore
+	if eventStore, err = o.delegate(); err == nil {
+		err = eventStore.Close()
+	}
+	return
+}
+
+var ctxKeyNamespace = "namespace"
+
+func ContextGetNamespace(ctx context.Context) string {
+	return ctx.Value(ctxKeyNamespace).(string)
+}
+
+func ContextSetNamespace(ctx context.Context, namespace string) context.Context {
+	return context.WithValue(ctx, ctxKeyNamespace, namespace)
 }

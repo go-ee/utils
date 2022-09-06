@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"io"
-	os "os"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -28,9 +28,8 @@ func NewEventStore(folder string) *EventStore {
 // Save implements the Save method of the eventhorizon.EventStore interface.
 func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersion int) (err error) {
 	if len(events) == 0 {
-		return eh.EventStoreError{
-			Err:       eh.ErrNoEventsToAppend,
-			Namespace: eh.NamespaceFromContext(ctx),
+		return &eh.EventStoreError{
+			Err: fmt.Errorf("no events to append for '%v'", esh.ContextGetNamespace(ctx)),
 		}
 	}
 
@@ -61,9 +60,8 @@ func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersio
 	for i, event := range events {
 		// Only accept events belonging to the same aggregate.
 		if event.AggregateID() != aggregateId {
-			return eh.EventStoreError{
-				Err:       eh.ErrInvalidEvent,
-				Namespace: eh.NamespaceFromContext(ctx),
+			return &eh.EventStoreError{
+				Err: fmt.Errorf("invalid event for '%v'", esh.ContextGetNamespace(ctx)),
 			}
 		}
 
@@ -149,21 +147,19 @@ func (s *EventStore) Replace(ctx context.Context, event eh.Event) error {
 func (s *EventStore) RenameEvent(ctx context.Context, from, to eh.EventType) error {
 	return nil
 }
- */
+*/
 
 func (s *EventStore) Clear(ctx context.Context) error {
 	if err := os.RemoveAll(s.buildFolderName(ctx)); err != nil {
-		return eh.EventStoreError{
-			Err:       esh.ErrCouldNotClearDB,
-			BaseErr:   err,
-			Namespace: eh.NamespaceFromContext(ctx),
+		return &eh.EventStoreError{
+			Err: fmt.Errorf("%v: %v", esh.ErrCouldNotClearDB, err),
 		}
 	}
 	return nil
 }
 
 func (s *EventStore) buildFolderName(ctx context.Context) string {
-	return filepath.Join(s.folder, eh.NamespaceFromContext(ctx))
+	return filepath.Join(s.folder, esh.ContextGetNamespace(ctx))
 }
 
 func scanLastEvent(ctx context.Context, scanner *eio.ReverseScanner) (ret *dbEvent, err error) {
@@ -195,10 +191,8 @@ func checkAggregateVersion(
 	// only insert if version of aggregate is matching (ie not changed
 	// since loading the aggregate).
 	if aggregateVersion != originalVersion {
-		err = eh.EventStoreError{
-			Err:       esh.ErrCouldNotSaveAggregate,
-			BaseErr:   fmt.Errorf("invalid original version %d", originalVersion),
-			Namespace: eh.NamespaceFromContext(ctx),
+		err = &eh.EventStoreError{
+			Err: fmt.Errorf("%v, invalid original version %d", esh.ErrCouldNotSaveAggregate, originalVersion),
 		}
 	}
 	return
