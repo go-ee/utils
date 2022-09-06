@@ -1,8 +1,8 @@
 package email
 
 import (
+	"github.com/go-ee/utils/lg"
 	"github.com/matcornic/hermes/v2"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -37,7 +37,7 @@ type Themes struct {
 func (o *Themes) LoadTheme(theme string) (ret hermes.Theme) {
 	ret = o.themes[theme]
 	if ret == nil {
-		logrus.Warnf("can't load the the '%v', use the theme '%v'", theme, o.defaultTheme.Name())
+		lg.LOG.Warnf("can't load the the '%v', use the theme '%v'", theme, o.defaultTheme.Name())
 		ret = o.defaultTheme
 	}
 	return ret
@@ -55,7 +55,7 @@ func LoadThemes(themesFolder string) (ret *Themes) {
 	var files []os.FileInfo
 	var logErr error
 	if files, logErr = ioutil.ReadDir(themesFolder); logErr != nil {
-		logrus.Infof("can't load external themes from '%v' because '%v'", themesFolder, logErr)
+		lg.LOG.Infof("can't load external themes from '%v' because '%v'", themesFolder, logErr)
 		return
 	}
 
@@ -79,7 +79,7 @@ func LoadThemes(themesFolder string) (ret *Themes) {
 				html: string(html),
 				text: string(text),
 			}
-			logrus.Infof("the hermes theme loaded '%v'", theme.Name())
+			lg.LOG.Infof("the hermes theme loaded '%v'", theme.Name())
 			ret.themes[theme.Name()] = theme
 		}
 	}
@@ -87,5 +87,5 @@ func LoadThemes(themesFolder string) (ret *Themes) {
 }
 
 func logErrorLoad(fileInfo os.FileInfo, loadErr error) {
-	logrus.Infof("skip theme '%v' because '%v'", fileInfo.Name(), loadErr)
+	lg.LOG.Infof("skip theme '%v' because '%v'", fileInfo.Name(), loadErr)
 }

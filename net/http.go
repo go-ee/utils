@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
+	"github.com/go-ee/utils/lg"
 	"io"
 	"io/ioutil"
 	"log"
@@ -198,11 +198,11 @@ func CorsWrap(allowPattern string, h http.Handler) http.Handler {
 func LogBody(w http.ResponseWriter, r *http.Request) bool {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		logrus.Infof("error reading body: %v", err)
+		lg.LOG.Infof("error reading body: %v", err)
 		http.Error(w, "can't read body", http.StatusBadRequest)
 		return true
 	} else {
-		logrus.Infof("body: %s", body)
+		lg.LOG.Infof("body: %s", body)
 	}
 	return false
 }

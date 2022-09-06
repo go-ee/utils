@@ -7,6 +7,16 @@ import (
 	"time"
 )
 
+var LOG = NewZapProdLogger()
+
+func InitLOG(debug bool) {
+	if debug {
+		LOG = NewZapDevLogger()
+	} else {
+		LOG = NewZapProdLogger()
+	}
+}
+
 func NewZapProdLogger() *zap.SugaredLogger {
 	cfg := zap.NewProductionConfig()
 	return buildLogger(&cfg)

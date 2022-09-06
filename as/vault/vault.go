@@ -9,25 +9,25 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 )
 
-type VaultClient struct {
+type Client struct {
 	appName string
 	client  *vaultapi.Client
 	logical *vaultapi.Logical
 }
 
-func NewVaultClient(appName string, token string, address string) (ret *VaultClient, err error) {
+func NewClient(appName string, token string, address string) (ret *Client, err error) {
 	client, err := vaultapi.NewClient(vaultapi.DefaultConfig())
 	if err == nil {
 		client.SetToken(token)
 		if len(address) > 0 {
 			client.SetAddress(address)
 		}
-		ret = &VaultClient{appName: appName, client: client, logical: client.Logical()}
+		ret = &Client{appName: appName, client: client, logical: client.Logical()}
 	}
 	return
 }
 
-func (o *VaultClient) fillAccessData(name string, security *as.Security) (err error) {
+func (o *Client) fillAccessData(name string, security *as.Security) (err error) {
 	var secret *vaultapi.Secret
 	basePath := fmt.Sprintf("secret/%v/%v", o.appName, strings.ToLower(name))
 	for key, item := range security.Access {
@@ -51,8 +51,8 @@ func BuildAccessFinderFromVault(appName string, vaultToken string, vaultAddress 
 	security := as.FillAccessKeys(keys, &as.Security{})
 	ret = security
 
-	var vault *VaultClient
-	vault, err = NewVaultClient(appName, vaultToken, vaultAddress)
+	var vault *Client
+	vault, err = NewClient(appName, vaultToken, vaultAddress)
 	if err == nil {
 		err = vault.fillAccessData(name, security)
 	}

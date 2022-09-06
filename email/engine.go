@@ -2,6 +2,7 @@ package email
 
 import (
 	"fmt"
+	"github.com/go-ee/utils/lg"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/go-ee/utils/encrypt"
 	"github.com/matcornic/hermes/v2"
-	"go.uber.org/zap"
 )
 
 const TIME_FORMAT = "2006_01_02__15_04_05_000"
@@ -74,7 +74,7 @@ func NewEngine(config *EngineConfig) (ret *Engine, err error) {
 }
 
 func (o *Engine) Send(emailData *EmailData) (err error) {
-	logrus.Debugf("Send, %v, %v", emailData.To, emailData.Subject)
+	lg.LOG.Debugf("Send, %v, %v", emailData.To, emailData.Subject)
 	o.hermesMu.RLock()
 	defer o.hermesMu.RUnlock()
 
@@ -124,9 +124,9 @@ func (o *Engine) storeEmail(label string, htmlMessage *Message, emailData *Email
 	}
 
 	if err = ioutil.WriteFile(filePath, fileData, o.filePerm); err != nil {
-		logrus.Warnf("can't write '%v', %v", filePath, err)
+		lg.LOG.Warnf("can't write '%v', %v", filePath, err)
 	} else {
-		logrus.Debugf("written '%v', bytes=%v", filePath, len(fileData))
+		lg.LOG.Debugf("written '%v', bytes=%v", filePath, len(fileData))
 	}
 	return
 }
@@ -135,9 +135,9 @@ func (o *Engine) checkAndCreateStorage() (err error) {
 	if o.storeEmails && o.emailsFolder != "" {
 		if err = os.MkdirAll(o.emailsFolder, 0755); err == nil {
 			o.storeEmails = true
-			logrus.Infof("use the storage path: %v", o.emailsFolder)
+			lg.LOG.Infof("use the storage path: %v", o.emailsFolder)
 		} else {
-			logrus.Infof("can't create the storage path '%v': %v", o.emailsFolder, err)
+			lg.LOG.Infof("can't create the storage path '%v': %v", o.emailsFolder, err)
 		}
 	}
 	return
