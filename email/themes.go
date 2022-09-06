@@ -2,7 +2,7 @@ package email
 
 import (
 	"github.com/matcornic/hermes/v2"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"io/ioutil"
 	"os"
 	"path/filepath"

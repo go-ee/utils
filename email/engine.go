@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-ee/utils/encrypt"
 	"github.com/matcornic/hermes/v2"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 const TIME_FORMAT = "2006_01_02__15_04_05_000"
@@ -52,10 +52,10 @@ type Engine struct {
 func NewEngine(config *EngineConfig) (ret *Engine, err error) {
 
 	ret = &Engine{
-		Hermes:    config.Hermes.ToHermes(),
-		Body:      config.Hermes.Body.ToHermesBody(),
-		Sender:    config.Sender,
-		hermesMu:  sync.RWMutex{},
+		Hermes:   config.Hermes.ToHermes(),
+		Body:     config.Hermes.Body.ToHermesBody(),
+		Sender:   config.Sender,
+		hermesMu: sync.RWMutex{},
 
 		themes:       LoadThemes(config.Hermes.ThemesFolder),
 		emailsFolder: config.EmailsFolder,

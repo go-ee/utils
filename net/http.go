@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
 	"log"
@@ -194,7 +194,6 @@ func CorsWrap(allowPattern string, h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 	})
 }
-
 
 func LogBody(w http.ResponseWriter, r *http.Request) bool {
 	body, err := ioutil.ReadAll(r.Body)

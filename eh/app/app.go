@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-ee/utils/net/muxlist"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"net/http"
 
 	"github.com/go-ee/utils/eh"

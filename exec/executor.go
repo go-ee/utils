@@ -1,24 +1,26 @@
 package exec
 
-import "github.com/sirupsen/logrus"
+import "go.uber.org/zap"
 
 type Executor interface {
 	Execute(label string, execute func() error) (err error)
 }
 
 type LogExecutor struct {
+	Log *zap.SugaredLogger
 }
 
-func (*LogExecutor) Execute(label string, execute func() error) (err error) {
-	logrus.Info(label)
+func (o *LogExecutor) Execute(label string, execute func() error) (err error) {
+	o.Log.Info(label)
 	err = execute()
 	return
 }
 
 type SkipExecutor struct {
+	Log *zap.SugaredLogger
 }
 
-func (*SkipExecutor) Execute(label string, _ func() error) (err error) {
-	logrus.Infof("(skip) %v", label)
+func (o *SkipExecutor) Execute(label string, _ func() error) (err error) {
+	o.Log.Infof("(skip) %v", label)
 	return
 }

@@ -1,34 +1,37 @@
 package lg
 
 import (
-	"github.com/sirupsen/logrus"
-	"io"
-	"os"
+	"fmt"
+	"go.uber.org/zap"
 	"path/filepath"
 	"time"
 )
 
-func LogrusTimeAsTimestampFormatter() {
-	customFormatter := new(logrus.TextFormatter)
-	customFormatter.TimestampFormat = "15:04:05"
-	customFormatter.FullTimestamp = true
-	logrus.SetFormatter(customFormatter)
+func NewZapProdLogger() *zap.SugaredLogger {
+	cfg := zap.NewProductionConfig()
+	return buildLogger(&cfg)
 }
 
-func LogrusToFile(appName string, folder string) {
+func NewZapDevLogger() *zap.SugaredLogger {
+	cfg := zap.NewProductionConfig()
+	return buildLogger(&cfg)
+}
+
+func NewZapFileOnlyLogger(appName string, folder string) *zap.SugaredLogger {
 	runID := time.Now().Format("_2006-01-02-15-04-05")
 	logLocation := filepath.Join(folder, appName+runID+".log")
-	logFile, err := os.OpenFile(logLocation, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		logrus.Fatalf("Failed to open log file %s for output: %s", logLocation, err)
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		logLocation,
 	}
-	logrus.SetOutput(io.MultiWriter(logFile))
-	logrus.RegisterExitHandler(func() {
-		if logFile == nil {
-			return
-		}
-		logFile.Close()
-	})
-	logrus.WithFields(logrus.Fields{"at": "start", "log-location": logLocation}).Info()
-	// perform actions
+	return buildLogger(&cfg)
+}
+
+func buildLogger(cfg *zap.Config) (ret *zap.SugaredLogger) {
+	if logger, err := cfg.Build(); err != nil {
+		panic(fmt.Sprintf("can't init logger, %v", err))
+	} else {
+		ret = logger.Sugar()
+	}
+	return ret
 }

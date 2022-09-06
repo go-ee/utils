@@ -2,18 +2,20 @@ package cliu
 
 import (
 	"github.com/go-ee/utils/lg"
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
 )
 
 type BaseCommand struct {
 	Command     *cli.Command
 	SubCommands []*BaseCommand
 	Parent      *BaseCommand
+	Log         *zap.SugaredLogger
 }
 
 type CommonFlags struct {
-	Debug *BoolFlag
+	Debug  *BoolFlag
+	Logger *zap.SugaredLogger
 }
 
 func NewCommonFlags() (ret *CommonFlags) {
@@ -36,14 +38,17 @@ func (o *CommonFlags) BeforeApp(args []string) {
 func (o *CommonFlags) beforeCmd(c *cli.Context) {
 	// app.Before CLU context is not really ready
 	o.initLogger()
-	logrus.Debugf("execute command '%v'", c.Command.Name)
+	o.Logger.Debugf("execute command '%v'", c.Command.Name)
 }
 
 func (o *CommonFlags) initLogger() {
-	lg.LogrusTimeAsTimestampFormatter()
 	if o.Debug.CurrentValue {
-		logrus.SetLevel(logrus.DebugLevel)
+		//TODO set debug level
+		o.Logger = lg.NewZapDevLogger()
+	} else {
+		o.Logger = lg.NewZapProdLogger()
 	}
+	return
 }
 
 func NewDebugFlag() *BoolFlag {
