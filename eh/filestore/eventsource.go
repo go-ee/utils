@@ -158,6 +158,11 @@ func (s *EventStore) Clear(ctx context.Context) error {
 	return nil
 }
 
+func (s *EventStore) Close() error {
+	//nothing todo for now
+	return nil
+}
+
 func (s *EventStore) buildFolderName(ctx context.Context) string {
 	return filepath.Join(s.folder, esh.ContextGetNamespace(ctx))
 }

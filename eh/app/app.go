@@ -10,7 +10,6 @@ import (
 	"github.com/go-ee/utils/eh"
 	"github.com/go-ee/utils/net"
 	"github.com/gorilla/mux"
-	"github.com/looplab/eventhorizon"
 	"github.com/rs/cors"
 )
 
@@ -61,7 +60,7 @@ func NewAppBase(appInfo *Info, serverConfig *ServerConfig, secure bool, middlewa
 		ServerConfig: serverConfig,
 
 		NewContext: func(structure string) context.Context {
-			return eventhorizon.NewContextWithNamespace(context.Background(), appInfo.AppName+"/"+structure)
+			return eh.ContextSetNamespace(context.Background(), appInfo.AppName+"/"+structure)
 		},
 		Router:          mux.NewRouter().StrictSlash(true),
 		Secure:          secure,

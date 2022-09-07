@@ -46,8 +46,7 @@ func NewRepo(folder string) (ret *Repo, err error) {
 	return
 }
 
-// Parent implements the Parent method of the eventhorizon.ReadRepo interface.
-func (r *Repo) Parent() eh.ReadRepo {
+func (r *Repo) InnerRepo(context.Context) eh.ReadRepo {
 	return nil
 }
 
@@ -197,7 +196,10 @@ func (r *Repo) namespace(ctx context.Context) (ns string, err error) {
 
 func (r *Repo) loadFile(ns string) (err error) {
 	if _, ok := r.db[ns]; !ok {
-		fileJson := r.buildFileNameAndMkdirParents(ns)
+		var fileJson string
+		if fileJson, err = r.buildFileNameAndMkdirParents(ns); err != nil {
+			return
+		}
 		if items, jsonErr := eio.LoadArrayJsonByReflect(fileJson, r.entityType); err != nil {
 			err = &eh.RepoError{
 				Err: fmt.Errorf("could not load entity, %v: %v", jsonErr, ns),
@@ -227,7 +229,10 @@ func (r *Repo) saveFile(ns string) (err error) {
 	}
 
 	data, _ := json.MarshalIndent(items, "", "  ")
-	fileJson := r.buildFileNameAndMkdirParents(ns)
+	var fileJson string
+	if fileJson, err = r.buildFileNameAndMkdirParents(ns); err != nil {
+		return
+	}
 
 	if writeErr := os.WriteFile(fileJson, data, r.defaultFilePerm); writeErr != nil {
 		err = &eh.RepoError{
@@ -238,27 +243,19 @@ func (r *Repo) saveFile(ns string) (err error) {
 	return
 }
 
-func (r *Repo) buildFileNameAndMkdirParents(ns string) string {
-	fileJson := filepath.Join(r.folder, ns+".json")
-	r.MkdirParents(fileJson)
-	return fileJson
+func (r *Repo) buildFileNameAndMkdirParents(ns string) (ret string, err error) {
+	ret = filepath.Join(r.folder, ns+".json")
+	err = r.MkdirParents(ret)
+	return
 }
 
 func (r *Repo) MkdirParents(file string) error {
 	return os.MkdirAll(filepath.Dir(file), r.defaultFolderPerm)
 }
 
-// Repository returns a parent ReadRepo if there is one.
-func Repository(repo eh.ReadRepo) *Repo {
-	if repo == nil {
-		return nil
-	}
-
-	if r, ok := repo.(*Repo); ok {
-		return r
-	}
-
-	return Repository(repo.Parent())
+func (r *Repo) Close() (err error) {
+	//noting todo for now
+	return
 }
 
 /*
