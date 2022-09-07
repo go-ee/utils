@@ -1,4 +1,4 @@
-package eh
+package ehu
 
 import (
 	"context"

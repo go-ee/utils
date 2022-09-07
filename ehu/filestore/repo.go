@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	esh "github.com/go-ee/utils/eh"
 	"github.com/go-ee/utils/eio"
+	"github.com/looplab/eventhorizon/namespace"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -36,7 +36,7 @@ type Repo struct {
 
 // NewRepo creates a new Repo.
 func NewRepo(folder string) (ret *Repo, err error) {
-	if err = os.MkdirAll(folder, DEFAULT_FOLDER_PERM); err == nil {
+	if err = os.MkdirAll(folder, DefaultFolderPerm); err == nil {
 		ret = &Repo{
 			Base: NewBase(folder),
 			ids:  map[string][]uuid.UUID{},
@@ -54,7 +54,7 @@ func (r *Repo) InnerRepo(context.Context) eh.ReadRepo {
 func (r *Repo) Find(ctx context.Context, id uuid.UUID) (ret eh.Entity, err error) {
 	if r.factoryFn == nil {
 		return nil, &eh.RepoError{
-			Err:      fmt.Errorf("%v: %v", ErrModelNotSet, esh.ContextGetNamespace(ctx)),
+			Err:      fmt.Errorf("%v: %v", ErrModelNotSet, namespace.FromContext(ctx)),
 			Op:       eh.RepoOpFind,
 			EntityID: id,
 		}
@@ -71,7 +71,7 @@ func (r *Repo) Find(ctx context.Context, id uuid.UUID) (ret eh.Entity, err error
 	item, ok := r.db[ns][id]
 	if !ok {
 		return nil, &eh.RepoError{
-			Err:      fmt.Errorf("%v: %v", eh.ErrEntityNotFound, esh.ContextGetNamespace(ctx)),
+			Err:      fmt.Errorf("%v: %v", eh.ErrEntityNotFound, namespace.FromContext(ctx)),
 			Op:       eh.RepoOpFind,
 			EntityID: id,
 		}
@@ -86,7 +86,7 @@ func (r *Repo) Find(ctx context.Context, id uuid.UUID) (ret eh.Entity, err error
 func (r *Repo) FindAll(ctx context.Context) (ret []eh.Entity, err error) {
 	if r.factoryFn == nil {
 		return nil, &eh.RepoError{
-			Err: fmt.Errorf("%v: %v", ErrModelNotSet, esh.ContextGetNamespace(ctx)),
+			Err: fmt.Errorf("%v: %v", ErrModelNotSet, namespace.FromContext(ctx)),
 			Op:  eh.RepoOpFindAll,
 		}
 	}
@@ -114,7 +114,7 @@ func (r *Repo) FindAll(ctx context.Context) (ret []eh.Entity, err error) {
 func (r *Repo) Save(ctx context.Context, entity eh.Entity) (err error) {
 	if r.factoryFn == nil {
 		return &eh.RepoError{
-			Err:      fmt.Errorf("%v: %v", ErrModelNotSet, esh.ContextGetNamespace(ctx)),
+			Err:      fmt.Errorf("%v: %v", ErrModelNotSet, namespace.FromContext(ctx)),
 			Op:       eh.RepoOpSave,
 			EntityID: entity.EntityID(),
 		}
@@ -130,7 +130,7 @@ func (r *Repo) Save(ctx context.Context, entity eh.Entity) (err error) {
 
 	if entity.EntityID() == uuid.Nil {
 		return &eh.RepoError{
-			Err: fmt.Errorf("could not save entity, missing entity id: %v", esh.ContextGetNamespace(ctx)),
+			Err: fmt.Errorf("could not save entity, missing entity id: %v", namespace.FromContext(ctx)),
 			Op:  eh.RepoOpSave,
 		}
 	}
@@ -175,7 +175,7 @@ func (r *Repo) Remove(ctx context.Context, id uuid.UUID) (err error) {
 	}
 
 	err = &eh.RepoError{
-		Err: fmt.Errorf("%v: %v", eh.ErrEntityNotFound, esh.ContextGetNamespace(ctx)),
+		Err: fmt.Errorf("%v: %v", eh.ErrEntityNotFound, namespace.FromContext(ctx)),
 		Op:  eh.RepoOpRemove,
 	}
 	return
@@ -189,7 +189,7 @@ func (r *Repo) SetEntityFactory(f func() eh.Entity) {
 
 // Helper to get the namespace and ensure that its data exists.
 func (r *Repo) namespace(ctx context.Context) (ns string, err error) {
-	ns = esh.ContextGetNamespace(ctx)
+	ns = namespace.FromContext(ctx)
 	err = r.loadFile(ns)
 	return
 }

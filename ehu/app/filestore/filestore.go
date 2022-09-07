@@ -1,20 +1,20 @@
-package mongo
+package filestore
 
 import (
-	"github.com/go-ee/utils/eh"
-	"github.com/go-ee/utils/eh/app"
+	"github.com/go-ee/utils/ehu"
+	"github.com/go-ee/utils/ehu/app"
+	es "github.com/go-ee/utils/ehu/filestore"
+	repo "github.com/go-ee/utils/ehu/filestore"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	eb "github.com/looplab/eventhorizon/eventbus/local"
-	es "github.com/looplab/eventhorizon/eventstore/mongodb"
-	repo "github.com/looplab/eventhorizon/repo/mongodb"
+	"path/filepath"
 )
 
-func NewAppMongo(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool, mongoUrl string) *app.Base {
+func NewAppFileStore(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool, storeFolder string) *app.Base {
+
 	// Create the event store.
-	eventStore := &eh.EventStoreDelegate{Factory: func() (ret eventhorizon.EventStore, err error) {
-		return es.NewEventStore("localhost", appInfo.ProductName)
-	}}
+	eventStore := es.NewEventStore(filepath.Join(storeFolder, "eventstore"))
 
 	// Create the event bus that distributes events.
 	eventBus := eb.NewEventBus(nil)
@@ -26,7 +26,7 @@ func NewAppMongo(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool,
 	reposFactory := func(name string, factory func() eventhorizon.Entity) (ret eventhorizon.ReadWriteRepo, err error) {
 		if item, ok := repos[name]; !ok {
 			var repoInst *repo.Repo
-			if repoInst, err = repo.NewRepo(mongoUrl, appInfo.ProductName, name); err == nil {
+			if repoInst, err = repo.NewRepo(filepath.Join(storeFolder, "repos")); err == nil {
 				repoInst.SetEntityFactory(factory)
 				ret = repoInst
 			}
@@ -37,7 +37,7 @@ func NewAppMongo(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool,
 		return
 	}
 	return app.NewAppBase(appInfo, serverConfig, secure,
-		&eh.Middleware{
+		&ehu.Middleware{
 			EventStore: eventStore,
 			EventBus:   eventBus,
 			CommandBus: commandBus,

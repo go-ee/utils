@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"github.com/go-ee/utils/lg"
 	"github.com/go-ee/utils/net/muxlist"
+	"github.com/looplab/eventhorizon/namespace"
 	"net/http"
 
-	"github.com/go-ee/utils/eh"
+	"github.com/go-ee/utils/ehu"
 	"github.com/go-ee/utils/net"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -38,11 +39,11 @@ func (o *ServerConfig) Listen() (ret string) {
 }
 
 type Base struct {
-	*eh.Middleware
+	*ehu.Middleware
 	*Info
 	*ServerConfig
 
-	ProjectorListener eh.DelegateEventHandler
+	ProjectorListener ehu.DelegateEventHandler
 	SetupCallbacks    []func() error
 	NewContext        func(namespace string) context.Context
 	Router            *mux.Router
@@ -53,14 +54,14 @@ type Base struct {
 	notFoundMessage string
 }
 
-func NewAppBase(appInfo *Info, serverConfig *ServerConfig, secure bool, middleware *eh.Middleware) (ret *Base) {
+func NewAppBase(appInfo *Info, serverConfig *ServerConfig, secure bool, middleware *ehu.Middleware) (ret *Base) {
 	ret = &Base{
 		Middleware:   middleware,
 		Info:         appInfo,
 		ServerConfig: serverConfig,
 
 		NewContext: func(structure string) context.Context {
-			return eh.ContextSetNamespace(context.Background(), appInfo.AppName+"/"+structure)
+			return namespace.NewContext(context.Background(), appInfo.AppName+"/"+structure)
 		},
 		Router:          mux.NewRouter().StrictSlash(true),
 		Secure:          secure,

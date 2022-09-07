@@ -1,4 +1,4 @@
-package eh
+package ehu
 
 import (
 	"context"
@@ -343,14 +343,4 @@ func (o *EventStoreDelegate) Close() (err error) {
 		err = eventStore.Close()
 	}
 	return
-}
-
-var ctxKeyNamespace = "namespace"
-
-func ContextGetNamespace(ctx context.Context) string {
-	return ctx.Value(ctxKeyNamespace).(string)
-}
-
-func ContextSetNamespace(ctx context.Context, namespace string) context.Context {
-	return context.WithValue(ctx, ctxKeyNamespace, namespace)
 }

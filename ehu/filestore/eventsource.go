@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	esh "github.com/go-ee/utils/eh"
+	"github.com/go-ee/utils/ehu"
 	"github.com/go-ee/utils/eio"
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
+	"github.com/looplab/eventhorizon/namespace"
 	"io"
 	"os"
 	"path/filepath"
@@ -29,13 +30,13 @@ func NewEventStore(folder string) *EventStore {
 func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersion int) (err error) {
 	if len(events) == 0 {
 		return &eh.EventStoreError{
-			Err: fmt.Errorf("no events to append for '%v'", esh.ContextGetNamespace(ctx)),
+			Err: fmt.Errorf("no events to append for '%v'", namespace.FromContext(ctx)),
 		}
 	}
 
 	namespaceFolder := s.buildFolderName(ctx)
 	if err = os.MkdirAll(namespaceFolder, s.defaultFolderPerm); err != nil {
-		return esh.NewErrCouldNotSaveAggregate(ctx, err)
+		return ehu.NewErrCouldNotSaveAggregate(ctx, err)
 	}
 
 	firstEvent := events[0]
@@ -49,7 +50,7 @@ func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersio
 	var aggregateEventsFile *os.File
 	if aggregateEventsFile, err =
 		os.OpenFile(aggregateEventsFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, s.defaultFilePerm); err != nil {
-		return esh.NewErrCouldNotSaveAggregate(ctx, err)
+		return ehu.NewErrCouldNotSaveAggregate(ctx, err)
 	}
 	defer aggregateEventsFile.Close()
 
@@ -61,13 +62,13 @@ func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersio
 		// Only accept events belonging to the same aggregate.
 		if event.AggregateID() != aggregateId {
 			return &eh.EventStoreError{
-				Err: fmt.Errorf("invalid event for '%v'", esh.ContextGetNamespace(ctx)),
+				Err: fmt.Errorf("invalid event for '%v'", namespace.FromContext(ctx)),
 			}
 		}
 
 		// Only accept events that apply to the correct aggregate version.
 		if event.Version() != originalVersion+i+1 {
-			return esh.NewErrIncorrectEventVersion(ctx)
+			return ehu.NewErrIncorrectEventVersion(ctx)
 		}
 
 		// Create the dbEvent record for the DB.
@@ -100,7 +101,7 @@ func (s *EventStore) Load(ctx context.Context, id uuid.UUID) (ret []eh.Event, er
 		if os.IsNotExist(err) {
 			return []eh.Event{}, nil
 		} else {
-			return nil, esh.NewErrCouldNotLoadAggregate(ctx, err)
+			return nil, ehu.NewErrCouldNotLoadAggregate(ctx, err)
 		}
 	}
 	defer eventsFile.Close()
@@ -108,14 +109,14 @@ func (s *EventStore) Load(ctx context.Context, id uuid.UUID) (ret []eh.Event, er
 	eventIndex := 0
 	scanner, err := eio.NewReverseScannerFile(eventsFile)
 	if err != nil {
-		return nil, esh.NewErrCouldNotLoadAggregate(ctx, err)
+		return nil, ehu.NewErrCouldNotLoadAggregate(ctx, err)
 	}
 	// read last line
 	if !scanner.Scan() {
 		if scanner.ScanErr() == io.EOF {
 			return s.noEvents()
 		}
-		return nil, esh.NewErrCouldNotLoadAggregate(ctx, err)
+		return nil, ehu.NewErrCouldNotLoadAggregate(ctx, err)
 	}
 
 	var lastEvent *dbEvent
@@ -140,11 +141,11 @@ func (s *EventStore) noEvents() ([]eh.Event, error) {
 }
 
 /*
-func (s *EventStore) Replace(ctx context.Context, event eh.Event) error {
+func (s *EventStore) Replace(ctx context.Context, event ehu.Event) error {
 	return nil
 }
 
-func (s *EventStore) RenameEvent(ctx context.Context, from, to eh.EventType) error {
+func (s *EventStore) RenameEvent(ctx context.Context, from, to ehu.EventType) error {
 	return nil
 }
 */
@@ -152,7 +153,7 @@ func (s *EventStore) RenameEvent(ctx context.Context, from, to eh.EventType) err
 func (s *EventStore) Clear(ctx context.Context) error {
 	if err := os.RemoveAll(s.buildFolderName(ctx)); err != nil {
 		return &eh.EventStoreError{
-			Err: fmt.Errorf("%v: %v", esh.ErrCouldNotClearDB, err),
+			Err: fmt.Errorf("%v: %v", ehu.ErrCouldNotClearDB, err),
 		}
 	}
 	return nil
@@ -164,13 +165,13 @@ func (s *EventStore) Close() error {
 }
 
 func (s *EventStore) buildFolderName(ctx context.Context) string {
-	return filepath.Join(s.folder, esh.ContextGetNamespace(ctx))
+	return filepath.Join(s.folder, namespace.FromContext(ctx))
 }
 
 func scanLastEvent(ctx context.Context, scanner *eio.ReverseScanner) (ret *dbEvent, err error) {
 	if !scanner.Scan() {
 		if scanner.ScanErr() != io.EOF {
-			err = esh.NewErrCouldNotLoadAggregate(ctx, scanner.ScanErr())
+			err = ehu.NewErrCouldNotLoadAggregate(ctx, scanner.ScanErr())
 		}
 	} else {
 		ret, err = parseEvent(ctx, scanner.Bytes())
@@ -183,7 +184,7 @@ func checkAggregateVersion(
 
 	var lastEvent *dbEvent
 	if lastEvent, err = loadLastEvent(ctx, eventsFileName); err != nil {
-		return esh.NewErrCouldNotLoadAggregate(ctx, err)
+		return ehu.NewErrCouldNotLoadAggregate(ctx, err)
 	}
 	var aggregateVersion int
 	if lastEvent == nil {
@@ -197,7 +198,7 @@ func checkAggregateVersion(
 	// since loading the aggregate).
 	if aggregateVersion != originalVersion {
 		err = &eh.EventStoreError{
-			Err: fmt.Errorf("%v, invalid original version %d", esh.ErrCouldNotSaveAggregate, originalVersion),
+			Err: fmt.Errorf("%v, invalid original version %d", ehu.ErrCouldNotSaveAggregate, originalVersion),
 		}
 	}
 	return
@@ -212,7 +213,7 @@ func loadLastEvent(ctx context.Context, eventsFileName string) (ret *dbEvent, er
 
 	var scanner *eio.ReverseScanner
 	if scanner, err = eio.NewReverseScannerFile(aggregateEventsFile); err != nil {
-		err = esh.NewErrCouldNotLoadAggregate(ctx, err)
+		err = ehu.NewErrCouldNotLoadAggregate(ctx, err)
 		return
 	}
 
@@ -223,14 +224,14 @@ func loadLastEvent(ctx context.Context, eventsFileName string) (ret *dbEvent, er
 func writeEvent(ctx context.Context, dbEvent dbEvent, aggregateEventsWriter *bufio.Writer) error {
 	if bytes, err := json.Marshal(dbEvent); err == nil {
 		if _, err = aggregateEventsWriter.Write(bytes); err != nil {
-			return esh.NewErrCouldNotSaveAggregate(ctx, err)
+			return ehu.NewErrCouldNotSaveAggregate(ctx, err)
 		} else {
 			if _, err = aggregateEventsWriter.WriteString("\n"); err != nil {
-				return esh.NewErrCouldNotSaveAggregate(ctx, err)
+				return ehu.NewErrCouldNotSaveAggregate(ctx, err)
 			}
 		}
 	} else {
-		return esh.NewErrCouldNotMarshalEvent(ctx, err)
+		return ehu.NewErrCouldNotMarshalEvent(ctx, err)
 	}
 	return nil
 }
@@ -238,7 +239,7 @@ func writeEvent(ctx context.Context, dbEvent dbEvent, aggregateEventsWriter *buf
 func parseEvent(ctx context.Context, data []byte) (ret *dbEvent, err error) {
 	dbEventType := dbEventType{}
 	if err = json.Unmarshal(data, &dbEventType); err != nil {
-		err = esh.NewErrCouldNotUnmarshalEvent(ctx, err)
+		err = ehu.NewErrCouldNotUnmarshalEvent(ctx, err)
 		return
 	}
 
@@ -251,7 +252,7 @@ func parseEvent(ctx context.Context, data []byte) (ret *dbEvent, err error) {
 	if err = json.Unmarshal(data, &dbEvent); err == nil {
 		ret = &dbEvent
 	} else {
-		err = esh.NewErrCouldNotUnmarshalEvent(ctx, err)
+		err = ehu.NewErrCouldNotUnmarshalEvent(ctx, err)
 	}
 	return
 }

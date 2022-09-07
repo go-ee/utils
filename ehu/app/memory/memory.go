@@ -1,8 +1,8 @@
 package memory
 
 import (
-	"github.com/go-ee/utils/eh"
-	"github.com/go-ee/utils/eh/app"
+	"github.com/go-ee/utils/ehu"
+	"github.com/go-ee/utils/ehu/app"
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	eb "github.com/looplab/eventhorizon/eventbus/local"
@@ -33,7 +33,7 @@ func NewAppMemory(appInfo *app.Info, serverConfig *app.ServerConfig, secure bool
 		return
 	}
 	return app.NewAppBase(appInfo, serverConfig, secure,
-		&eh.Middleware{
+		&ehu.Middleware{
 			EventStore: eventStore,
 			EventBus:   eventBus,
 			CommandBus: commandBus,
