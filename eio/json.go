@@ -21,7 +21,7 @@ func CreateFileJson(items interface{}, jsonFile string) (file *os.File, err erro
 	}
 	log.Println("file written", jsonFile)
 	defer file.Close()
-	file.Write(plantsJSON)
+	_, err = file.Write(plantsJSON)
 
 	return
 }
@@ -38,7 +38,7 @@ func CreateFileJson(items interface{}, jsonFile string) (file *os.File, err erro
 
 	err = json.Unmarshal(bytes, slicePtr.Interface())
 
- */
+*/
 
 func LoadArrayJsonByReflect(jsonFile string, t reflect.Type) (ret []interface{}, err error) {
 	var filename *os.File
