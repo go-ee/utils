@@ -3,6 +3,7 @@ package lg
 import (
 	"fmt"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"path/filepath"
 	"time"
 )
@@ -38,6 +39,7 @@ func NewZapFileOnlyLogger(appName string, folder string) *zap.SugaredLogger {
 }
 
 func buildLogger(cfg *zap.Config) (ret *zap.SugaredLogger) {
+	cfg.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
 	if logger, err := cfg.Build(); err != nil {
 		panic(fmt.Sprintf("can't init logger, %v", err))
 	} else {
