@@ -77,7 +77,7 @@ func (r *Repo) Find(ctx context.Context, id uuid.UUID) (ret eh.Entity, err error
 		}
 	}
 	ret = r.factoryFn()
-	copier.Copy(ret, item)
+	err = copier.Copy(ret, item)
 
 	return
 }
@@ -103,7 +103,9 @@ func (r *Repo) FindAll(ctx context.Context) (ret []eh.Entity, err error) {
 	for _, id := range r.ids[ns] {
 		if item, ok := r.db[ns][id]; ok {
 			entity := r.factoryFn()
-			copier.Copy(entity, item)
+			if err = copier.Copy(entity, item); err != nil {
+				break
+			}
 			ret = append(ret, entity)
 		}
 	}
@@ -113,11 +115,12 @@ func (r *Repo) FindAll(ctx context.Context) (ret []eh.Entity, err error) {
 // Save implements the Save method of the eventhorizon.WriteRepo interface.
 func (r *Repo) Save(ctx context.Context, entity eh.Entity) (err error) {
 	if r.factoryFn == nil {
-		return &eh.RepoError{
+		err = &eh.RepoError{
 			Err:      fmt.Errorf("%v: %v", ErrModelNotSet, namespace.FromContext(ctx)),
 			Op:       eh.RepoOpSave,
 			EntityID: entity.EntityID(),
 		}
+		return
 	}
 
 	r.dbMu.Lock()
@@ -129,10 +132,11 @@ func (r *Repo) Save(ctx context.Context, entity eh.Entity) (err error) {
 	}
 
 	if entity.EntityID() == uuid.Nil {
-		return &eh.RepoError{
+		err = &eh.RepoError{
 			Err: fmt.Errorf("could not save entity, missing entity id: %v", namespace.FromContext(ctx)),
 			Op:  eh.RepoOpSave,
 		}
+		return
 	}
 
 	id := entity.EntityID()
@@ -140,7 +144,9 @@ func (r *Repo) Save(ctx context.Context, entity eh.Entity) (err error) {
 		r.ids[ns] = append(r.ids[ns], id)
 	}
 	toInsert := r.factoryFn()
-	copier.Copy(toInsert, entity)
+	if err = copier.Copy(toInsert, entity); err != nil {
+		return
+	}
 	r.db[ns][id] = toInsert
 
 	err = r.saveFile(ns)
@@ -170,7 +176,7 @@ func (r *Repo) Remove(ctx context.Context, id uuid.UUID) (err error) {
 		}
 		r.ids[ns] = append(r.ids[ns][:index], r.ids[ns][index+1:]...)
 
-		r.saveFile(ns)
+		err = r.saveFile(ns)
 		return
 	}
 

@@ -6,7 +6,7 @@ import (
 	"github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	eb "github.com/looplab/eventhorizon/eventbus/local"
-	es "github.com/looplab/eventhorizon/eventstore/mongodb"
+	es "github.com/looplab/eventhorizon/eventstore/mongodb_v2"
 	repo "github.com/looplab/eventhorizon/repo/mongodb"
 )
 

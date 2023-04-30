@@ -337,6 +337,16 @@ func (o *EventStoreDelegate) Load(ctx context.Context, id uuid.UUID) (ret []even
 	return
 }
 
+// LoadFrom loads all events from version for the aggregate id from the store.
+func (o *EventStoreDelegate) LoadFrom(ctx context.Context, id uuid.UUID, version int) (
+	ret []eventhorizon.Event, err error) {
+	var eventStore eventhorizon.EventStore
+	if eventStore, err = o.delegate(); err == nil {
+		ret, err = eventStore.LoadFrom(ctx, id, version)
+	}
+	return
+}
+
 func (o *EventStoreDelegate) Close() (err error) {
 	var eventStore eventhorizon.EventStore
 	if eventStore, err = o.delegate(); err == nil {

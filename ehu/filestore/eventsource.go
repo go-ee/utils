@@ -86,8 +86,8 @@ func (s *EventStore) Save(ctx context.Context, events []eh.Event, originalVersio
 			return err
 		}
 	}
-	aggregateEventsWriter.Flush()
-	aggregateEventsFile.Close()
+	err = aggregateEventsWriter.Flush()
+	err = aggregateEventsFile.Close()
 
 	return
 }
@@ -99,9 +99,10 @@ func (s *EventStore) Load(ctx context.Context, id uuid.UUID) (ret []eh.Event, er
 	var eventsFile *os.File
 	if eventsFile, err = os.Open(eventsFileName); err != nil {
 		if os.IsNotExist(err) {
-			return []eh.Event{}, nil
+			return s.noEvents()
 		} else {
-			return nil, ehu.NewErrCouldNotLoadAggregate(ctx, err)
+			err = ehu.NewErrCouldNotLoadAggregate(ctx, err)
+			return
 		}
 	}
 	defer eventsFile.Close()
@@ -109,31 +110,83 @@ func (s *EventStore) Load(ctx context.Context, id uuid.UUID) (ret []eh.Event, er
 	eventIndex := 0
 	scanner, err := eio.NewReverseScannerFile(eventsFile)
 	if err != nil {
-		return nil, ehu.NewErrCouldNotLoadAggregate(ctx, err)
+		err = ehu.NewErrCouldNotLoadAggregate(ctx, err)
+		return
 	}
 	// read last line
 	if !scanner.Scan() {
 		if scanner.ScanErr() == io.EOF {
 			return s.noEvents()
 		}
-		return nil, ehu.NewErrCouldNotLoadAggregate(ctx, err)
+		err = ehu.NewErrCouldNotLoadAggregate(ctx, err)
+		return
 	}
 
 	var lastEvent *dbEvent
 	if lastEvent, err = parseEvent(ctx, scanner.Bytes()); err != nil {
 		return
 	}
-	var events = make([]eh.Event, lastEvent.Version())
+	ret = make([]eh.Event, lastEvent.Version())
 	eventIndex = lastEvent.Version() - 1
-	events[eventIndex] = lastEvent
+	ret[eventIndex] = lastEvent
 
 	for scanner.Scan() {
 		eventIndex -= 1
-		if events[eventIndex], err = parseEvent(ctx, scanner.Bytes()); err != nil {
+		if ret[eventIndex], err = parseEvent(ctx, scanner.Bytes()); err != nil {
 			return
 		}
 	}
-	return events, nil
+	return
+}
+
+func (s *EventStore) LoadFrom(ctx context.Context, id uuid.UUID, version int) (ret []eh.Event, err error) {
+	namespaceFolder := s.buildFolderName(ctx)
+
+	eventsFileName := buildEventsFileName(namespaceFolder, id)
+	var eventsFile *os.File
+	if eventsFile, err = os.Open(eventsFileName); err != nil {
+		if os.IsNotExist(err) {
+			return s.noEvents()
+		} else {
+			err = ehu.NewErrCouldNotLoadAggregate(ctx, err)
+			return
+		}
+	}
+	defer eventsFile.Close()
+
+	eventIndex := 0
+	scanner, err := eio.NewReverseScannerFile(eventsFile)
+	if err != nil {
+		err = ehu.NewErrCouldNotLoadAggregate(ctx, err)
+		return
+	}
+	// read last line
+	if !scanner.Scan() {
+		if scanner.ScanErr() == io.EOF {
+			return s.noEvents()
+		}
+		err = ehu.NewErrCouldNotLoadAggregate(ctx, err)
+		return
+	}
+
+	var lastEvent *dbEvent
+	if lastEvent, err = parseEvent(ctx, scanner.Bytes()); err != nil {
+		return
+	}
+	ret = make([]eh.Event, lastEvent.Version())
+	eventIndex = lastEvent.Version() - 1
+	ret[eventIndex] = lastEvent
+
+	for scanner.Scan() {
+		eventIndex -= 1
+		if ret[eventIndex], err = parseEvent(ctx, scanner.Bytes()); err != nil {
+			break
+		}
+		if eventIndex == version {
+			break
+		}
+	}
+	return
 }
 
 func (s *EventStore) noEvents() ([]eh.Event, error) {

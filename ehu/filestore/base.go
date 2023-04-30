@@ -22,5 +22,5 @@ func NewBase(folder string) *Base {
 	}
 }
 
-func (s *Base) Close(ctx context.Context) {
+func (s *Base) Close(_ context.Context) {
 }

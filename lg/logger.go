@@ -24,7 +24,7 @@ func NewZapProdLogger() *zap.SugaredLogger {
 }
 
 func NewZapDevLogger() *zap.SugaredLogger {
-	cfg := zap.NewProductionConfig()
+	cfg := zap.NewDevelopmentConfig()
 	return buildLogger(&cfg)
 }
 
