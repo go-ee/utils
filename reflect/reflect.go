@@ -1,4 +1,4 @@
-package common
+package reflect
 
 import "reflect"
 
