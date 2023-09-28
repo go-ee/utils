@@ -20,7 +20,8 @@ func (o *Types) Register(name string, typedNil interface{}) {
 }
 
 type LabeledTypes struct {
-	LabeledTypes map[string]*Types
+	LabeledTypes      map[string]*Types
+	CacheResolveFirst map[string]reflect.Type
 }
 
 func (o *LabeledTypes) Register(label string) (ret *Types) {
@@ -32,9 +33,32 @@ func (o *LabeledTypes) Register(label string) (ret *Types) {
 	return
 }
 
-func (o *LabeledTypes) Resolve(namespace, name string) (ret reflect.Type) {
+func (o *LabeledTypes) Resolve(namespace, typ string) (ret reflect.Type) {
 	if namespaceTypes := o.LabeledTypes[namespace]; namespaceTypes != nil {
-		ret = namespaceTypes.Resolve(name)
+		ret = namespaceTypes.Resolve(typ)
+	}
+	return
+}
+
+func (o *LabeledTypes) ResolveFirst(typ string) (ret reflect.Type) {
+	if o.CacheResolveFirst != nil {
+		var ok bool
+		if ret, ok = o.CacheResolveFirst[typ]; !ok {
+			ret = o.resolveFirst(typ)
+			o.CacheResolveFirst[typ] = ret
+		}
+	} else {
+		ret = o.resolveFirst(typ)
+	}
+	return
+}
+
+func (o *LabeledTypes) resolveFirst(typ string) (ret reflect.Type) {
+	for _, types := range o.LabeledTypes {
+		ret = types.Resolve(typ)
+		if ret != nil {
+			break
+		}
 	}
 	return
 }
