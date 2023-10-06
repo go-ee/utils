@@ -1,42 +1,49 @@
 package reflect
 
-type LabeledCreator func(label string) interface{}
+type LabeledCreator[T any, M any] func() (T, M)
 
-type Types struct {
+type Types[T any, M any] struct {
 	Label string
-	Types map[string]LabeledCreator
+	Types map[string]LabeledCreator[T, M]
 }
 
-func (o *Types) Resolve(name string) LabeledCreator {
+func (o *Types[T, M]) Resolve(name string) LabeledCreator[T, M] {
 	return o.Types[name]
 }
 
-func (o *Types) Register(name string, creator LabeledCreator) {
+func (o *Types[T, M]) Register(name string, creator LabeledCreator[T, M]) {
 	o.Types[name] = creator
 }
 
-type LabeledTypes struct {
-	LabeledTypes      map[string]*Types
-	CacheResolveFirst map[string]LabeledCreator
+func NewLabeledTypes[T any, M any]() *LabeledTypes[T, M] {
+	return &LabeledTypes[T, M]{
+		LabeledTypes:      make(map[string]*Types[T, M]),
+		CacheResolveFirst: make(map[string]LabeledCreator[T, M]),
+	}
 }
 
-func (o *LabeledTypes) Register(label string) (ret *Types) {
-	ret = &Types{
+type LabeledTypes[T any, M any] struct {
+	LabeledTypes      map[string]*Types[T, M]
+	CacheResolveFirst map[string]LabeledCreator[T, M]
+}
+
+func (o *LabeledTypes[T, M]) Register(label string) (ret *Types[T, M]) {
+	ret = &Types[T, M]{
 		Label: label,
-		Types: make(map[string]LabeledCreator),
+		Types: make(map[string]LabeledCreator[T, M]),
 	}
 	o.LabeledTypes[label] = ret
 	return
 }
 
-func (o *LabeledTypes) Resolve(namespace, typ string) (ret LabeledCreator) {
+func (o *LabeledTypes[T, M]) Resolve(namespace, typ string) (ret LabeledCreator[T, M]) {
 	if namespaceTypes := o.LabeledTypes[namespace]; namespaceTypes != nil {
 		ret = namespaceTypes.Resolve(typ)
 	}
 	return
 }
 
-func (o *LabeledTypes) ResolveFirst(typ string) (ret LabeledCreator) {
+func (o *LabeledTypes[T, M]) ResolveFirst(typ string) (ret LabeledCreator[T, M]) {
 	if o.CacheResolveFirst != nil {
 		var ok bool
 		if ret, ok = o.CacheResolveFirst[typ]; !ok {
@@ -49,7 +56,7 @@ func (o *LabeledTypes) ResolveFirst(typ string) (ret LabeledCreator) {
 	return
 }
 
-func (o *LabeledTypes) resolveFirst(typ string) (ret LabeledCreator) {
+func (o *LabeledTypes[T, M]) resolveFirst(typ string) (ret LabeledCreator[T, M]) {
 	for _, types := range o.LabeledTypes {
 		ret = types.Resolve(typ)
 		if ret != nil {
