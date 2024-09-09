@@ -20,6 +20,7 @@ func InitLOG(debug bool) {
 
 func NewZapProdLogger() *zap.SugaredLogger {
 	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{"stdout"}
 	return buildLogger(&cfg)
 }
 
