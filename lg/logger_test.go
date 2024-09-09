@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewZapProdLogger(t *testing.T) {
-	logger := NewZapProdLogger()
+	logger := NewZapProdStdoutLogger()
 	if logger == nil {
 		t.Fatal("Expected a zap.SugaredLogger instance, got nil")
 	}
