@@ -47,6 +47,7 @@ func NewZapFileOnlyLogger(appName string, folder string) *zap.SugaredLogger {
 
 func buildLogger(cfg *zap.Config) (ret *zap.SugaredLogger) {
 	cfg.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
+	cfg.Encoding = "console"
 	if logger, err := cfg.Build(); err != nil {
 		panic(fmt.Sprintf("can't init logger, %v", err))
 	} else {
