@@ -8,19 +8,18 @@ import (
 	"time"
 )
 
-var LOG = NewZapProdStdErrLogger()
+var LOG = NewZapProdStdErrLogger(false)
 
 func InitLOG(debug bool) {
-	if debug {
-		LOG = NewZapDevLogger()
-	} else {
-		LOG = NewZapProdStdoutLogger()
-	}
+	LOG = NewZapProdStdErrLogger(debug)
 }
 
-func NewZapProdStdErrLogger() *zap.SugaredLogger {
+func NewZapProdStdErrLogger(debug bool) *zap.SugaredLogger {
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{"stderr"}
+	if debug {
+		cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	}
 	return buildLogger(&cfg)
 }
 
